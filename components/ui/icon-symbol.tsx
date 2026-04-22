@@ -1,12 +1,15 @@
 // Fallback for using MaterialIcons on Android and web.
 
+import FontAwesome from '@expo/vector-icons/FontAwesome';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { SymbolWeight, SymbolViewProps } from 'expo-symbols';
+import { SymbolViewProps, SymbolWeight } from 'expo-symbols';
 import { ComponentProps } from 'react';
 import { OpaqueColorValue, type StyleProp, type TextStyle } from 'react-native';
 
 type IconMapping = Record<SymbolViewProps['name'], ComponentProps<typeof MaterialIcons>['name']>;
+// type IconMappingSecond = Record<SymbolViewProps['name'], ComponentProps<typeof FontAwesome>['name']>;
 type IconSymbolName = keyof typeof MAPPING;
+type IconSymbolNameSecond = keyof typeof MAPPINGSECOND;
 
 /**
  * Add your SF Symbols to Material Icons mappings here.
@@ -14,11 +17,16 @@ type IconSymbolName = keyof typeof MAPPING;
  * - see SF Symbols in the [SF Symbols](https://developer.apple.com/sf-symbols/) app.
  */
 const MAPPING = {
-  'house.fill': 'home',
-  'paperplane.fill': 'send',
-  'chevron.left.forwardslash.chevron.right': 'code',
-  'chevron.right': 'chevron-right',
+    'house.fill': 'home',
+    'paperplane.fill': 'send',
+    'message': 'message',
+    'chevron.left.forwardslash.chevron.right': 'code',
+    'chevron.right': 'chevron-right',
 } as IconMapping;
+
+const MAPPINGSECOND = {
+    'user': 'user',
+} as const;
 
 /**
  * An icon component that uses native SF Symbols on iOS, and Material Icons on Android and web.
@@ -26,16 +34,31 @@ const MAPPING = {
  * Icon `name`s are based on SF Symbols and require manual mapping to Material Icons.
  */
 export function IconSymbol({
-  name,
-  size = 24,
-  color,
-  style,
+    name,
+    size = 24,
+    color,
+    style,
 }: {
-  name: IconSymbolName;
-  size?: number;
-  color: string | OpaqueColorValue;
-  style?: StyleProp<TextStyle>;
-  weight?: SymbolWeight;
+    name: IconSymbolName;
+    size?: number;
+    color: string | OpaqueColorValue;
+    style?: StyleProp<TextStyle>;
+    weight?: SymbolWeight;
 }) {
-  return <MaterialIcons color={color} size={size} name={MAPPING[name]} style={style} />;
+    return <MaterialIcons color={color} size={size} name={MAPPING[name]} style={style} />;
+}
+
+export function IconSymbolSecond({
+    name,
+    size = 24,
+    color,
+    style,
+}: {
+    name: IconSymbolNameSecond;
+    size?: number;
+    color: string | OpaqueColorValue;
+    style?: StyleProp<TextStyle>;
+    weight?: SymbolWeight;
+}) {
+    return <FontAwesome color={color} size={size} name={MAPPINGSECOND[name] as ComponentProps<typeof FontAwesome>['name']} style={style} />;
 }
