@@ -8,39 +8,65 @@ jobs:
   build:
     runs-on: ubuntu-latest
 
+    env:
+      NODE_OPTIONS: --max_old_space_size=4096
+
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
 
+      # ✅ Setup Node 20 FIRST before anything else
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 20
+          cache: npm
 
-      - name: Install dependencies
-        run: npm install
-
-      # ✅ Inject environment variables
-      - name: Create .env file
-        run: |
-          echo "EXPO_PUBLIC_SUPABASE_URL=${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}" >> .env
-          echo "EXPO_PUBLIC_SUPABASE_ANON_KEY=${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}" >> .env
-
+      # ✅ Setup Java before installs
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
-          distribution: 'temurin'
-          java-version: '17'
+          distribution: temurin
+          java-version: 17
 
+      # ✅ Setup Android SDK
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
+      # ✅ Clean install
+      - name: Install dependencies
+        run: npm ci
+
+      # ✅ Create env file
+      - name: Create .env file
+        run: |
+          echo "EXPO_PUBLIC_SUPABASE_URL=${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}" > .env
+          echo "EXPO_PUBLIC_SUPABASE_ANON_KEY=${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}" >> .env
+
+      # ✅ NO --clean flag so node_modules stays intact for Metro
+      - name: Expo Prebuild
+        run: npx expo prebuild --platform android
+
+      # ✅ Debug which Node Gradle will use (remove after confirming fix)
+      - name: Debug Node path
+        run: |
+          which node
+          node --version
+          echo $PATH
+
+      # ✅ Explicitly pass node binary so Gradle uses Node 20, not system default
       - name: Build APK
         run: |
           cd android
           chmod +x gradlew
-          ./gradlew assembleRelease
+          NODE=$(which node)
+          echo "Using node: $NODE ($($NODE --version))"
+          ./gradlew assembleRelease \
+            -Pnode.path=$NODE \
+            --no-daemon \
+            --stacktrace
 
+      # ✅ Upload APK
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
