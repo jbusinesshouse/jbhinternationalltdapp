@@ -265,6 +265,12 @@ const ProductPreview = () => {
     }
 
     const mainImage = product.product_images?.find((i) => i.is_main);
+    const images = product.product_images
+        ? [
+            ...product.product_images.filter(i => i.is_main),   // main first
+            ...product.product_images.filter(i => !i.is_main),  // others after
+        ]
+        : [];
 
     const calculatedWidth = width - 80;
 
@@ -301,7 +307,7 @@ const ProductPreview = () => {
             >
 
                 {/* IMAGE */}
-                <View style={styles.imageWrapper}>
+                {/* <View style={styles.imageWrapper}>
                     <Image
                         source={
                             mainImage?.image_url
@@ -310,6 +316,32 @@ const ProductPreview = () => {
                         }
                         style={styles.productImg}
                     />
+                </View> */}
+                <View style={styles.imageWrapper}>
+                    <ScrollView
+                        horizontal
+                        pagingEnabled
+                        showsHorizontalScrollIndicator={false}
+                    >
+                        {images.length > 0 ? (
+                            images.map((img, index) => (
+                                <Image
+                                    key={index}
+                                    source={{ uri: img.image_url }}
+                                    style={[
+                                        styles.productImg,
+                                        { width: width } // full screen swipe
+                                    ]}
+                                    resizeMode="cover"
+                                />
+                            ))
+                        ) : (
+                            <Image
+                                source={require("@/assets/images/product1.png")}
+                                style={[styles.productImg, { width: width }]}
+                            />
+                        )}
+                    </ScrollView>
                 </View>
 
                 {/* PRICE */}

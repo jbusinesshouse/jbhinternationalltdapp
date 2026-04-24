@@ -80,3 +80,24 @@ jobs:
         with:
           name: app-release.aab
           path: android/app/build/outputs/bundle/release/app-release.aab
+
+      # ✅ Build APK
+      - name: Build APK
+        env:
+          MYAPP_UPLOAD_STORE_PASSWORD: ${{ secrets.MYAPP_UPLOAD_STORE_PASSWORD }}
+          MYAPP_UPLOAD_KEY_ALIAS: ${{ secrets.MYAPP_UPLOAD_KEY_ALIAS }}
+          MYAPP_UPLOAD_KEY_PASSWORD: ${{ secrets.MYAPP_UPLOAD_KEY_PASSWORD }}
+        run: |
+          cd android
+          NODE=$(which node)
+          ./gradlew assembleRelease \
+            -Pnode.path=$NODE \
+            --no-daemon \
+            --stacktrace
+
+      # ✅ Upload APK
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release.apk
+          path: android/app/build/outputs/apk/release/app-release.apk
