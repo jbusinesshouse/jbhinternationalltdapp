@@ -50,7 +50,9 @@ const Account = () => {
             .eq('is_deleted', false)
 
         if (error) {
-            console.log('PRODUCT ERROR:', error)
+            if (__DEV__) {
+                console.log('PRODUCT ERROR:', error)
+            }
             return
         }
 
@@ -78,7 +80,9 @@ const Account = () => {
                     prev.filter(p => p.id !== actionProduct.id)
                 )
             } else {
-                console.log('DELETE ERROR:', error)
+                if (__DEV__) {
+                    console.log('DELETE ERROR:', error)
+                }
             }
         }
 

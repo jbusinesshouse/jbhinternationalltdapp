@@ -52,7 +52,9 @@ const Checkout = () => {
         try {
             return JSON.parse(data);
         } catch (e) {
-            console.log("Invalid JSON:", e);
+            if (__DEV__) {
+                console.log("Invalid JSON:", e);
+            }
             return null;
         }
     }, [data]);
@@ -101,7 +103,9 @@ const Checkout = () => {
         ]);
 
         if (error) {
-            console.log("Notification error:", error);
+            if (__DEV__) {
+                console.log("Notification error:", error);
+            }
         }
     };
 
@@ -116,7 +120,7 @@ const Checkout = () => {
         setLoading(true);
 
         try {
-            // ✅ 1. Get user (buyer)
+            // 1. Get user
             const {
                 data: { user },
                 error: userError,
@@ -124,31 +128,10 @@ const Checkout = () => {
 
             if (userError || !user) {
                 Alert.alert("Error", "You are not logged in");
-                setLoading(false);
                 return;
             }
 
-            // ✅ 2. Insert order
-            const { data: order, error: orderError } = await supabase
-                .from("orders")
-                .insert([
-                    {
-                        full_name: form.full_name,
-                        phone: form.phone,
-                        email: form.email || null,
-                        city: form.city,
-                        delivery_address: form.address,
-                        product_id: parsed.product.id,
-                        status: "pending",
-                        user_id: user.id,
-                    },
-                ])
-                .select()
-                .single();
-
-            if (orderError) throw orderError;
-
-            // ✅ 3. Build order_items
+            // 2. Build order items (UNCHANGED LOGIC)
             const orderItems: any[] = [];
 
             parsed.variants.forEach((variant) => {
@@ -158,7 +141,6 @@ const Checkout = () => {
                     if (!qty || qty <= 0) return;
 
                     orderItems.push({
-                        order_id: order.id,
                         variant_id: variant.id,
                         size_id: sizeId,
                         quantity: qty,
@@ -168,18 +150,22 @@ const Checkout = () => {
                 });
             });
 
-            // ✅ 4. Insert order_items
-            if (orderItems.length > 0) {
-                const { error: itemsError } = await supabase
-                    .from("order_items")
-                    .insert(orderItems);
+            // 3. Call SUPABASE FUNCTION (NEW)
+            const { data: orderId, error } = await supabase.rpc("place_order", {
+                p_user_id: user.id,
+                p_full_name: form.full_name,
+                p_phone: form.phone,
+                p_email: form.email || null,
+                p_city: form.city,
+                p_address: form.address,
+                p_product_id: parsed.product.id,
+                p_items: orderItems,
+            });
 
-                if (itemsError) throw itemsError;
-            }
+            if (error) throw error;
 
-            /* ================= 🔔 NOTIFICATIONS ================= */
+            /* ================= NOTIFICATIONS (UNCHANGED) ================= */
 
-            // ✅ 5. Get seller (IMPORTANT)
             const { data: productData } = await supabase
                 .from("products")
                 .select("seller_id")
@@ -188,32 +174,33 @@ const Checkout = () => {
 
             const sellerId = productData?.seller_id;
 
-            // 🔔 Notify seller
             if (sellerId) {
                 await sendNotification(
                     sellerId,
                     "New Order Received",
                     `${form.full_name} placed an order`,
-                    order.id
+                    orderId
                 );
             }
 
-            // 🔔 Notify buyer (self confirmation)
             await sendNotification(
                 user.id,
                 "Order Confirmed",
                 `Your order for ${parsed.product.name} has been placed`,
-                order.id
+                orderId
             );
-
-            /* ================= SUCCESS ================= */
 
             Alert.alert("Success", "Order placed successfully");
             router.replace("/");
 
-        } catch (err) {
-            console.log(err);
-            Alert.alert("Error", "Failed to place order");
+        } catch (err: any) {
+            if (__DEV__) {
+                console.log(err);
+            }
+            Alert.alert(
+                "Error",
+                err.message || "Failed to place order"
+            );
         } finally {
             setLoading(false);
         }

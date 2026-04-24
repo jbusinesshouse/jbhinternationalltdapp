@@ -30,7 +30,9 @@ export const useOrders = () => {
             if (error) throw error
             setOrders(data || [])
         } catch (err) {
-            console.log('Fetch orders error:', err)
+            if (__DEV__) {
+                console.log('Fetch orders error:', err)
+            }
         }
     }
 

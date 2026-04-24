@@ -93,7 +93,11 @@ const OrderDetails = () => {
                     .eq('id', data.user_id)
                     .single()
 
-                if (profileError) console.log('Profile fetch error:', profileError)
+                if (profileError) {
+                    if (__DEV__) {
+                        console.log('Profile fetch error:', profileError)
+                    }
+                }
                 else setSeller(profileData)
             }
 

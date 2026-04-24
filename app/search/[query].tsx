@@ -88,7 +88,9 @@ const Search = () => {
             const { data, error } = await queryBuilder.or(orQuery);
 
             if (error) {
-                console.log('Search error:', error);
+                if (__DEV__) {
+                    console.log('Search error:', error);
+                }
                 setProducts([]);
                 return;
             }
@@ -105,7 +107,9 @@ const Search = () => {
 
             setProducts(formatted);
         } catch (err) {
-            console.log('Search exception:', err);
+            if (__DEV__) {
+                console.log('Search exception:', err);
+            }
         } finally {
             setLoading(false);
         }

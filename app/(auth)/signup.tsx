@@ -120,20 +120,20 @@ const Signup = () => {
     }
 
     // ---- URI → BLOB ----
-    const uriToBlob = async (uri: string): Promise<Blob> => {
-        return new Promise((resolve, reject) => {
-            const xhr = new XMLHttpRequest()
-            xhr.onload = function () {
-                resolve(xhr.response)
-            }
-            xhr.onerror = function () {
-                reject(new Error('uriToBlob failed'))
-            }
-            xhr.responseType = 'blob'
-            xhr.open('GET', uri, true)
-            xhr.send(null)
-        })
-    }
+    // const uriToBlob = async (uri: string): Promise<Blob> => {
+    //     return new Promise((resolve, reject) => {
+    //         const xhr = new XMLHttpRequest()
+    //         xhr.onload = function () {
+    //             resolve(xhr.response)
+    //         }
+    //         xhr.onerror = function () {
+    //             reject(new Error('uriToBlob failed'))
+    //         }
+    //         xhr.responseType = 'blob'
+    //         xhr.open('GET', uri, true)
+    //         xhr.send(null)
+    //     })
+    // }
 
     // FILTERING UPAZILA BASED ON DISTRICT
     const availableUpazilas = useMemo(() => {
@@ -176,13 +176,17 @@ const Signup = () => {
                 password,
             })
 
-            console.log('Signup response:', { data, error })
+            if (__DEV__) {
+                console.log('Signup response:', { data, error })
+            }
 
             if (error) throw error
             if (!data.user) throw new Error('User not created')
 
             const userId = data.user.id
-            console.log('User ID:', userId)
+            if (__DEV__) {
+                console.log('User ID:', userId)
+            }
 
             let avatarUrl = null
 
@@ -194,7 +198,9 @@ const Signup = () => {
                     const arrayBuffer = await response.arrayBuffer()
                     const filePath = `${userId}.jpg`
 
-                    console.log('Uploading image...')
+                    if (__DEV__) {
+                        console.log('Uploading image...')
+                    }
 
                     const { data: uploadData, error: uploadError } = await supabase.storage
                         .from('profile-images')
@@ -203,27 +209,37 @@ const Signup = () => {
                             upsert: true,
                         })
 
-                    console.log('Upload result:', { uploadData, uploadError })
+                    if (__DEV__) {
+                        console.log('Upload result:', { uploadData, uploadError })
+                    }
 
                     if (uploadError) {
-                        console.error('Upload error:', uploadError)
+                        if (__DEV__) {
+                            console.error('Upload error:', uploadError)
+                        }
                         // Don't throw - continue without image
                     } else {
                         const { data: publicData } = supabase.storage
                             .from('profile-images')
                             .getPublicUrl(filePath)
                         avatarUrl = publicData.publicUrl
-                        console.log('Avatar URL:', avatarUrl)
+                        if (__DEV__) {
+                            console.log('Avatar URL:', avatarUrl)
+                        }
                     }
                 } catch (uploadErr) {
-                    console.error('Image upload failed:', uploadErr)
+                    if (__DEV__) {
+                        console.error('Image upload failed:', uploadErr)
+                    }
                     // Continue without image
                 }
             }
 
 
             // Insert profile (with or without avatar)
-            console.log('Inserting profile...')
+            if (__DEV__) {
+                console.log('Inserting profile...')
+            }
             const { data: profileData, error: profileError } = await supabase
                 .from('profiles')
                 .upsert({
@@ -239,11 +255,15 @@ const Signup = () => {
                 })
                 .select()
 
-            console.log('Profile insert result:', { profileData, profileError })
+            if (__DEV__) {
+                console.log('Profile insert result:', { profileData, profileError })
+            }
 
             if (profileError) {
-                console.error('Profile error:', JSON.stringify(profileError, null, 2))
-                throw profileError
+                if (__DEV__) {
+                    console.error('Profile error:', JSON.stringify(profileError, null, 2))
+                    throw profileError
+                }
             }
 
             Alert.alert('Success', 'Account created successfully 🎉')
@@ -252,7 +272,9 @@ const Signup = () => {
             //     router.replace('/signin')
             // }, 1000);
         } catch (err: any) {
-            console.error('Full signup error:', err)
+            if (__DEV__) {
+                console.error('Full signup error:', err)
+            }
             setIsSettingUp(false);
             Alert.alert('Signup failed', err.message || err.hint || 'Please try again later')
         } finally {

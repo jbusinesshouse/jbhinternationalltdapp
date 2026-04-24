@@ -32,14 +32,18 @@ export default function Signin() {
                 password,
             })
 
-            console.log('Signin response:', { data, error })
+            if (__DEV__) {
+                console.log('Signin response:', { data, error })
+            }
 
             if (error) throw error
 
             // Navigation happens automatically via useProtectedRoute
             Alert.alert('Success', 'Welcome back!')
         } catch (err: any) {
-            console.error('Signin error:', err)
+            if (__DEV__) {
+                console.error('Signin error:', err)
+            }
             Alert.alert('Sign in failed', err.message || 'Invalid credentials')
         } finally {
             setLoading(false)

@@ -51,7 +51,9 @@ const PublicProfile = () => {
             .single()
 
         if (error) {
-            console.log('PROFILE ERROR:', error)
+            if (__DEV__) {
+                console.log('PROFILE ERROR:', error)
+            }
         } else {
             setProfile(data)
 
@@ -81,7 +83,9 @@ const PublicProfile = () => {
             .eq('is_deleted', false)
 
         if (error) {
-            console.log('PRODUCT ERROR:', error)
+            if (__DEV__) {
+                console.log('PRODUCT ERROR:', error)
+            }
             return
         }
 

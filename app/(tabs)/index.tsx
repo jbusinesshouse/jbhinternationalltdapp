@@ -42,7 +42,9 @@ export default function Index() {
       .eq("is_deleted", false)
 
     if (error) {
-      console.log("Error fetching products:", error)
+      if (__DEV__) {
+        console.log("Error fetching products:", error)
+      }
       return
     }
 

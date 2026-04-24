@@ -14,7 +14,9 @@ export default function useAppUpdate() {
         // 2. Exit early if in Expo Go
         // Constants.appOwnership === 'expo' means you are in the Expo Go app
         if (Constants.appOwnership === 'expo') {
-            console.log('Skipping update check: Not supported in Expo Go');
+            if (__DEV__) {
+                console.log('Skipping update check: Not supported in Expo Go');
+            }
             return;
         }
 
@@ -33,7 +35,9 @@ export default function useAppUpdate() {
                 }
             }
         } catch (e) {
-            console.log('Update check failed:', e)
+            if (__DEV__) {
+                console.log('Update check failed:', e)
+            }
         }
     }
 }

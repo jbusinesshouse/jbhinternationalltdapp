@@ -409,8 +409,10 @@ const EditProduct = () => {
             }
 
             // 5. Delete removed variants (cascade deletes sizes)
-            console.log(removedVariantIds.length);
-            
+            if (__DEV__) {
+                console.log(removedVariantIds.length);
+            }
+
             if (removedVariantIds.length > 0) {
                 await supabase
                     .from('product_variants')
@@ -439,7 +441,9 @@ const EditProduct = () => {
                         .single();
 
                     if (vErr || !newVariant) {
-                        console.error('Variant insert error:', vErr);
+                        if (__DEV__) {
+                            console.error('Variant insert error:', vErr);
+                        }
                         continue;
                     }
 

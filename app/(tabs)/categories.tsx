@@ -1,9 +1,11 @@
 import { supabase } from "@/lib/supabase";
-import { useRouter } from 'expo-router';
+import { Image } from "expo-image";
+import { useNavigation, useRouter } from 'expo-router';
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
+  Pressable,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -16,6 +18,7 @@ type CategoryProps = {
 };
 
 export default function Categories() {
+  const navigation = useNavigation()
   const router = useRouter();
   const [categories, setCategories] = useState<CategoryProps[]>([]);
   const [loading, setLoading] = useState(true);
@@ -30,7 +33,9 @@ export default function Categories() {
       if (error) throw error;
       setCategories(data || []);
     } catch (error) {
-      console.error("Error:", error);
+      if (__DEV__) {
+        console.error("Error:", error);
+      }
     } finally {
       setLoading(false);
     }
@@ -60,19 +65,32 @@ export default function Categories() {
   return (
     <View style={styles.container}>
       <View style={styles.main}>
-        <Text style={styles.title}>All Categories</Text>
+        <View style={styles.header}>
+          <Pressable onPress={() => navigation.goBack()}>
+            <Image
+              source={require('@/assets/images/icons/chevron-right.png')}
+              style={styles.backIcon}
+            />
+          </Pressable>
 
-        {loading ? (
-          <ActivityIndicator color="#000" style={{ marginTop: 20 }} />
-        ) : (
-          <FlatList
-            data={categories}
-            renderItem={renderItem}
-            keyExtractor={(item) => item.id.toString()}
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={styles.list}
-          />
-        )}
+          <Text style={styles.headerTitle}>Categories</Text>
+
+          <View style={{ width: 30 }} />
+        </View>
+
+        <View style={styles.contentWrapper}>
+          {loading ? (
+            <ActivityIndicator color="#000" style={{ marginTop: 20 }} />
+          ) : (
+            <FlatList
+              data={categories}
+              renderItem={renderItem}
+              keyExtractor={(item) => item.id.toString()}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.list}
+            />
+          )}
+        </View>
       </View>
     </View>
   );
@@ -85,14 +103,33 @@ const styles = StyleSheet.create({
   },
   main: {
     flex: 1,
-    paddingHorizontal: 20,
-    paddingTop: 50,
   },
-  title: {
-    fontSize: 22,
-    fontWeight: "bold",
-    marginVertical: 20,
-    color: "#1A1A1A",
+  header: {
+    paddingTop: 50,
+    paddingBottom: 15,
+    paddingHorizontal: 15,
+    marginBottom: 20,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    backgroundColor: '#fff',
+  },
+  backIcon: {
+    width: 30,
+    height: 30,
+    transform: 'rotate(180deg)',
+  },
+  headerTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  // title: {
+  //   fontSize: 22,
+  //   fontWeight: "bold",
+  //   marginVertical: 20,
+  //   color: "#1A1A1A",
+  // },
+  contentWrapper: {
+    paddingHorizontal: 15,
   },
   list: {
     paddingBottom: 40,

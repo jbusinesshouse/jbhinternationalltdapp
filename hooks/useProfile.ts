@@ -1,33 +1,34 @@
 import { supabase } from '@/lib/supabase'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 
 export const useProfile = () => {
     const [profile, setProfile] = useState<any>(null)
     const [loading, setLoading] = useState(true)
 
-    useEffect(() => {
-        const fetchProfile = async () => {
-            const {
-                data: { user },
-            } = await supabase.auth.getUser()
+    const fetchProfile = useCallback(async () => {
+        setLoading(true)
+        const {
+            data: { user },
+        } = await supabase.auth.getUser()
 
-            if (!user) {
-                setLoading(false)
-                return
-            }
-
-            const { data, error } = await supabase
-                .from('profiles')
-                .select('*')
-                .eq('id', user.id)
-                .single()
-
-            if (!error) setProfile(data)
+        if (!user) {
             setLoading(false)
+            return
         }
 
-        fetchProfile()
+        const { data, error } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', user.id)
+            .single()
+
+        if (!error) setProfile(data)
+        setLoading(false)
     }, [])
+
+    useEffect(() => {
+        fetchProfile()
+    }, [fetchProfile])
 
     const updateName = async (full_name: string) => {
         const {
@@ -46,5 +47,5 @@ export const useProfile = () => {
         setProfile((prev: any) => ({ ...prev, full_name }))
     }
 
-    return { profile, loading, updateName }
+    return { profile, loading, updateName, refetch: fetchProfile }
 }

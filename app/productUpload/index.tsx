@@ -85,7 +85,9 @@ const ProductUpload = () => {
                 .order('name', { ascending: true });
 
             if (error) {
-                console.error('Error fetching categories:', error);
+                if (__DEV__) {
+                    console.error('Error fetching categories:', error);
+                }
                 Alert.alert('Error', 'Failed to load categories: ' + error.message);
                 return;
             }
@@ -93,11 +95,15 @@ const ProductUpload = () => {
             if (data && data.length > 0) {
                 setCategories(data);
             } else {
-                console.log('No categories found in database');
+                if (__DEV__) {
+                    console.log('No categories found in database');
+                }
                 Alert.alert('Notice', 'No categories found. Please add categories to the database.');
             }
         } catch (error) {
-            console.error('Exception fetching categories:', error);
+            if (__DEV__) {
+                console.error('Exception fetching categories:', error);
+            }
             Alert.alert('Error', 'An unexpected error occurred: ' + String(error));
         } finally {
             setLoadingCategories(false);
@@ -113,7 +119,9 @@ const ProductUpload = () => {
                 .order('name', { ascending: true });
 
             if (error) {
-                console.error('Error fetching subcategories:', error);
+                if (__DEV__) {
+                    console.error('Error fetching subcategories:', error);
+                }
                 Alert.alert('Error', 'Failed to load subcategories: ' + error.message);
                 return;
             }
@@ -121,11 +129,15 @@ const ProductUpload = () => {
             if (data && data.length > 0) {
                 setAllSubcategories(data);
             } else {
-                console.log('No subcategories found in database');
+                if (__DEV__) {
+                    console.log('No subcategories found in database');
+                }
                 setAllSubcategories([]);
             }
         } catch (error) {
-            console.error('Exception fetching subcategories:', error);
+            if (__DEV__) {
+                console.error('Exception fetching subcategories:', error);
+            }
             Alert.alert('Error', 'An unexpected error occurred: ' + String(error));
         } finally {
             setLoadingSubcategories(false);
@@ -229,7 +241,9 @@ const ProductUpload = () => {
             .order('sort_order', { ascending: true });
 
         if (error) {
-            console.error(error);
+            if (__DEV__) {
+                console.error(error);
+            }
             return;
         }
 
@@ -253,7 +267,9 @@ const ProductUpload = () => {
                 });
 
             if (error) {
-                console.error('Upload error:', error);
+                if (__DEV__) {
+                    console.error('Upload error:', error);
+                }
                 return null;
             }
 
@@ -264,7 +280,9 @@ const ProductUpload = () => {
 
             return urlData.publicUrl;
         } catch (error) {
-            console.error('Exception uploading image:', error);
+            if (__DEV__) {
+                console.error('Exception uploading image:', error);
+            }
             return null;
         }
     };
@@ -355,7 +373,9 @@ const ProductUpload = () => {
                 .single();
 
             if (productError || !productData) {
-                console.error('Product insert error:', productError);
+                if (__DEV__) {
+                    console.error('Product insert error:', productError);
+                }
                 Alert.alert('Error', 'Failed to create product: ' + (productError?.message || 'Unknown error'));
                 setIsSubmitting(false);
                 return;
@@ -374,7 +394,9 @@ const ProductUpload = () => {
                 });
 
             if (mainImageError) {
-                console.error('Main image insert error:', mainImageError);
+                if (__DEV__) {
+                    console.error('Main image insert error:', mainImageError);
+                }
             }
 
             // Step 5: Insert additional images
@@ -391,7 +413,9 @@ const ProductUpload = () => {
                     .insert(additionalImagesData);
 
                 if (additionalImagesError) {
-                    console.error('Additional images insert error:', additionalImagesError);
+                    if (__DEV__) {
+                        console.error('Additional images insert error:', additionalImagesError);
+                    }
                 }
             }
 
@@ -408,7 +432,9 @@ const ProductUpload = () => {
                     .single();
 
                 if (variantError || !variantData) {
-                    console.error('Variant insert error:', variantError);
+                    if (__DEV__) {
+                        console.error('Variant insert error:', variantError);
+                    }
                     continue;
                 }
 
@@ -427,7 +453,9 @@ const ProductUpload = () => {
                     .insert(sizesData);
 
                 if (sizesError) {
-                    console.error('Sizes insert error:', sizesError);
+                    if (__DEV__) {
+                        console.error('Sizes insert error:', sizesError);
+                    }
                 }
             }
 
@@ -443,7 +471,9 @@ const ProductUpload = () => {
             );
 
         } catch (error) {
-            console.error('Exception during submission:', error);
+            if (__DEV__) {
+                console.error('Exception during submission:', error);
+            }
             Alert.alert('Error', 'An unexpected error occurred: ' + String(error));
         } finally {
             setIsSubmitting(false);

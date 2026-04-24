@@ -1,6 +1,7 @@
-import { styles } from '@/styles/support'
-import { useNavigation } from 'expo-router'
-import React, { useState } from 'react'
+import { supabase } from '@/lib/supabase'; // 👈 make sure path is correct
+import { styles } from '@/styles/support';
+import { useNavigation } from 'expo-router';
+import React, { useState } from 'react';
 import {
     Alert,
     Image,
@@ -11,7 +12,7 @@ import {
     Text,
     TextInput,
     View
-} from 'react-native'
+} from 'react-native';
 
 const Support = () => {
     const navigation = useNavigation()
@@ -29,18 +30,54 @@ const Support = () => {
         try {
             setSubmitting(true)
 
-            // TODO: replace with API call
-            await new Promise(resolve => setTimeout(resolve, 800))
+            // 🔐 Get logged-in user
+            const { data: userData, error: userError } = await supabase.auth.getUser()
+
+            if (userError || !userData.user) {
+                throw new Error('User not authenticated')
+            }
+
+            const userId = userData.user.id
+
+            // 📩 Insert support request
+            const { error: insertError } = await supabase
+                .from('support_requests')
+                .insert({
+                    user_id: userId,
+                    subject: subject.trim(),
+                    message: message.trim(),
+                    // is_read & status handled by default in DB
+                })
+
+            if (insertError) {
+                if (__DEV__) {
+                    console.error('Insert error:', insertError)
+                }
+                throw insertError
+            }
 
             Alert.alert(
                 'Request Submitted',
-                'Our support team will get back to you soon.'
+                'Our support team will get back to you soon.',
+                [
+                    {
+                        text: 'OK',
+                        onPress: () => {
+                            setSubject('')
+                            setMessage('')
+                            navigation.goBack() // 👈 go back here
+                        }
+                    }
+                ]
             )
-
-            setSubject('')
-            setMessage('')
-        } catch (err) {
-            Alert.alert('Error', 'Something went wrong. Please try again.')
+        } catch (err: any) {
+            if (__DEV__) {
+                console.error('Support error:', err)
+            }
+            Alert.alert(
+                'Error',
+                err.message || 'Something went wrong. Please try again.'
+            )
         } finally {
             setSubmitting(false)
         }

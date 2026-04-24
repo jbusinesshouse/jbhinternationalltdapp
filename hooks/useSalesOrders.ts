@@ -45,7 +45,9 @@ export const useSalesOrders = () => {
             if (error) throw error
             setOrders(data || [])
         } catch (err) {
-            console.log('Fetch sales orders error:', err)
+            if (__DEV__) {
+                console.log('Fetch sales orders error:', err)
+            }
         }
     }
 

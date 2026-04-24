@@ -47,14 +47,18 @@ const TopBar = () => {
                 .eq('is_read', false)
 
             if (error) {
-                console.log('Notification fetch error:', error)
+                if (__DEV__) {
+                    console.log('Notification fetch error:', error)
+                }
                 return
             }
 
             setUnreadCount(count || 0)
 
         } catch (err) {
-            console.log('Notification error:', err)
+            if (__DEV__) {
+                console.log('Notification error:', err)
+            }
         }
     }
 
@@ -71,7 +75,7 @@ const TopBar = () => {
         <View style={styles.container}>
             <View style={styles.TopMenuWrapper}>
                 <View style={styles.topMenuLeft}>
-                    <TouchableOpacity onPress={() => handleTopMenu(0)}>
+                    {/* <TouchableOpacity onPress={() => handleTopMenu(0)}>
                         <Text style={{
                             ...styles.buttonText,
                             borderBottomWidth: activeInd === 0 ? 2 : 0
@@ -87,7 +91,8 @@ const TopBar = () => {
                         }}>
                             Top Sellers
                         </Text>
-                    </TouchableOpacity>
+                    </TouchableOpacity> */}
+                    <Text style={styles.headingTitle}>Home</Text>
                 </View>
 
                 {/* 🔔 NOTIFICATION ICON + BADGE */}
@@ -159,6 +164,11 @@ const styles = StyleSheet.create({
         fontSize: 17,
         paddingBottom: 5,
         borderBottomColor: '#ffffff'
+    },
+    headingTitle: {
+        color: '#ffffff',
+        fontSize: 20,
+        fontWeight: 600
     },
     badge: {
         position: 'absolute',

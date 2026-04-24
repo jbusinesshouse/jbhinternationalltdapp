@@ -42,7 +42,9 @@ export default function CategoryProducts() {
                     .eq("category_id", categoryId);
 
                 if (error) {
-                    console.error("Subcategory error:", error);
+                    if (__DEV__) {
+                        console.error("Subcategory error:", error);
+                    }
                     return;
                 }
 
@@ -50,7 +52,9 @@ export default function CategoryProducts() {
                     setSubCategories([{ id: "all", name: "All" }, ...data]);
                 }
             } catch (err) {
-                console.error("Subcategory fetch failed:", err);
+                if (__DEV__) {
+                    console.error("Subcategory fetch failed:", err);
+                }
             }
         };
 
@@ -86,7 +90,9 @@ export default function CategoryProducts() {
             const { data, error } = await queryBuilder;
 
             if (error) {
-                console.error("Product error:", error);
+                if (__DEV__) {
+                    console.error("Product error:", error);
+                }
                 return;
             }
 
@@ -105,7 +111,9 @@ export default function CategoryProducts() {
                 setProducts([]);
             }
         } catch (err) {
-            console.error("Fetch error:", err);
+            if (__DEV__) {
+                console.error("Fetch error:", err);
+            }
         } finally {
             if (!isRefresh) setLoading(false);
         }

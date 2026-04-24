@@ -50,7 +50,9 @@ const Notifications = () => {
 
             setNotifications(data || [])
         } catch (err) {
-            console.log('Fetch notifications error:', err)
+            if (__DEV__) {
+                console.log('Fetch notifications error:', err)
+            }
         } finally {
             setLoading(false)
         }
@@ -89,7 +91,9 @@ const Notifications = () => {
                 )
             )
         } catch (err) {
-            console.log('Mark read error:', err)
+            if (__DEV__) {
+                console.log('Mark read error:', err)
+            }
         }
     }
 

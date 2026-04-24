@@ -28,7 +28,9 @@ const Orders = () => {
         try {
             await refetch() // 🔥 REAL DB REFRESH
         } catch (err) {
-            console.log('Refresh error:', err)
+            if (__DEV__) {
+                console.log('Refresh error:', err)
+            }
         } finally {
             setRefreshing(false)
         }

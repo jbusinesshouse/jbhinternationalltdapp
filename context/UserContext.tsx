@@ -41,7 +41,9 @@ export const UserProvider = ({ children }: { children: React.ReactNode }) => {
         if (!error) {
             setProfile(data)
         } else {
-            console.warn('Profile not found or error:', error.message)
+            if (__DEV__) {
+                console.warn('Profile not found or error:', error.message)
+            }
             setProfile(null)
         }
     }

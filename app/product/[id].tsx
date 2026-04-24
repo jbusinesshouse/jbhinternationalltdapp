@@ -49,6 +49,7 @@ type Size = {
 /* ================= COMPONENT ================= */
 
 const ProductPreview = () => {
+    const [storeType, setStoreType] = useState<string | null>(null);
     const [product, setProduct] = useState<Product | null>(null);
     const [variants, setVariants] = useState<Variant[]>([]);
     const [sizes, setSizes] = useState<Size[]>([]);
@@ -92,7 +93,12 @@ const ProductPreview = () => {
             .eq("id", id)
             .single();
 
-        if (error) return console.log(error);
+        if (error) {
+            if (__DEV__) {
+                console.log(error);
+            }
+            return
+        }
 
         setProduct({
             ...data,
@@ -100,6 +106,19 @@ const ProductPreview = () => {
                 ? data.seller[0]
                 : data.seller,
         });
+    };
+
+    const fetchCurrentUser = async () => {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+
+        const { data } = await supabase
+            .from("profiles")
+            .select("store_type")
+            .eq("id", user.id)
+            .single();
+
+        if (data) setStoreType(data.store_type);
     };
 
 
@@ -143,6 +162,7 @@ const ProductPreview = () => {
     useEffect(() => {
         fetchProduct();
         fetchVariants();
+        fetchCurrentUser();
     }, [id]);
 
     const onRefresh = async () => {
@@ -440,7 +460,11 @@ const ProductPreview = () => {
             {/* ACTION */}
             < View style={styles.productAct} >
                 <Pressable
-                    style={styles.productActOrder}
+                    style={[
+                        styles.productActOrder,
+                        storeType === "wholesale" && { backgroundColor: "#ccc" }
+                    ]}
+                    disabled={storeType === "wholesale"}
                     onPress={() => {
                         // 1. Calculate total selected quantity
                         const totalQty = Object.values(selectedQty).reduce((acc, variantSizes) => {
@@ -478,7 +502,7 @@ const ProductPreview = () => {
                     }}
                 >
                     <Text style={styles.productActOrderText}>
-                        Order Now
+                        {storeType === "wholesale" ? "Only Retailers Can Order" : "Order Now"}
                     </Text>
                 </Pressable>
             </View >

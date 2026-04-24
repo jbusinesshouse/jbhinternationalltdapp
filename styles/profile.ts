@@ -25,13 +25,27 @@ export const styles = StyleSheet.create({
         padding: 25,
         marginBottom: 10,
     },
-    avatar: {
+    avatarWrapper: {
         width: 120,
         height: 120,
         borderRadius: 60,
         borderWidth: 1,
         borderColor: '#e2e2e2',
         marginBottom: 10,
+        overflow: 'hidden',
+        alignItems: 'center',
+        justifyContent: 'center'
+    },
+    avatarOverlay: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        backgroundColor: 'rgba(0,0,0,0.4)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderRadius: 100,
     },
     name: {
         fontSize: 16,

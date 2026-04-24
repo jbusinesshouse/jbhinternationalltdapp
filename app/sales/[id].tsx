@@ -61,7 +61,9 @@ const SalesDetails = () => {
             setOrder(data as any)
 
         } catch (err) {
-            console.log(err)
+            if (__DEV__) {
+                console.log(err)
+            }
         } finally {
             setLoading(false)
         }
@@ -96,7 +98,9 @@ const SalesDetails = () => {
             if (error) throw error
 
         } catch (err) {
-            console.log(err)
+            if (__DEV__) {
+                console.log(err)
+            }
             setOrder(prev =>
                 prev ? { ...prev, status: oldStatus } : prev
             )
