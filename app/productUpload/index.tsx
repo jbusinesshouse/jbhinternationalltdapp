@@ -569,13 +569,18 @@ const ProductUpload = () => {
                                 <Picker
                                     selectedValue={subCategoryId}
                                     onValueChange={(val) => handleSelectCategory(val)}
+                                    style={{ color: '#111827' }}
+                                    dropdownIconColor="#111827"
+                                    mode="dropdown"
                                 >
-                                    <Picker.Item label="Select sub-category" value={null} />
+                                    <Picker.Item label="Select sub-category" value={null} color="#9CA3AF" style={{ color: '#9CA3AF' }} />
                                     {filteredSubcategories.map(subcat => (
                                         <Picker.Item
                                             key={subcat.id}
                                             label={subcat.name}
                                             value={subcat.id}
+                                            color="#9CA3AF"
+                                            style={{ color: '#9CA3AF' }}
                                         />
                                     ))}
                                 </Picker>

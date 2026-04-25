@@ -120,6 +120,8 @@ export const styles = StyleSheet.create({
         paddingHorizontal: 12,
         fontSize: 14,
         marginBottom: 10,
+        borderWidth: 1,
+        borderColor: '#d1d5db',
         color: '#000000',
         backgroundColor: '#ffffff',
     },
