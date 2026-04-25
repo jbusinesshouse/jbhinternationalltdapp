@@ -290,6 +290,7 @@ const ProductPreview = () => {
                     <TextInput
                         style={styles.searchInp}
                         placeholder="Search For Products"
+                        placeholderTextColor="#9CA3AF"
                         value={searchVal}
                         onChangeText={setSearchVal}
                     />
@@ -446,6 +447,7 @@ const ProductPreview = () => {
                                         </Pressable>
 
                                         <TextInput
+                                            placeholderTextColor="#9CA3AF"
                                             value={String(qty)}
                                             keyboardType="numeric"
                                             style={styles.sizeCount}

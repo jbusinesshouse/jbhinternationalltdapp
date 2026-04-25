@@ -179,6 +179,7 @@ export default function CategoryProducts() {
                     <TextInput
                         style={styles.searchInp}
                         placeholder='Search For Products'
+                        placeholderTextColor="#9CA3AF"
                         value={searchVal}
                         onChangeText={(text) => handleInp(text)}
                     />
@@ -248,13 +249,14 @@ const styles = StyleSheet.create({
     },
     searchInp: {
         height: 50,
-        backgroundColor: '#ffffff',
         borderRadius: 8,
         paddingLeft: 15,
         paddingRight: 75,
         fontSize: 16,
         borderWidth: 1,
         borderColor: "#F0F0F0",
+        color: '#000000',
+        backgroundColor: '#ffffff',
     },
     searchBtn: {
         width: 55,

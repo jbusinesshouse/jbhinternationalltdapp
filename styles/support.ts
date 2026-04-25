@@ -54,11 +54,12 @@ export const styles = StyleSheet.create({
         paddingHorizontal: 12,
         paddingVertical: 10,
         fontSize: 14,
-        backgroundColor: '#fff'
+        color: '#000000',
+        backgroundColor: '#ffffff',
     },
 
     textArea: {
-        height: 120
+        height: 120,
     },
 
     submitBtn: {

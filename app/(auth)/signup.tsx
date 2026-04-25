@@ -299,19 +299,22 @@ const Signup = () => {
                     )}
                 </TouchableOpacity>
 
-                <TextInput style={styles.input} placeholder="Full Name" value={fullName} onChangeText={setFullName} />
-                <TextInput style={styles.input} placeholder="Email" autoCapitalize="none" value={email} onChangeText={setEmail} />
-                <TextInput style={styles.input} placeholder="Phone" keyboardType="phone-pad" value={phone} onChangeText={setPhone} />
-                <TextInput style={styles.input} placeholder="Store/Warehouse Name" value={storeName} onChangeText={setStoreName} />
-                <TextInput style={styles.input} placeholder="Address" value={address} onChangeText={setAddress} />
+                <TextInput style={styles.input} placeholder="Full Name" placeholderTextColor="#9CA3AF" value={fullName} onChangeText={setFullName} />
+                <TextInput style={styles.input} placeholder="Email" placeholderTextColor="#9CA3AF" autoCapitalize="none" value={email} onChangeText={setEmail} />
+                <TextInput style={styles.input} placeholder="Phone" placeholderTextColor="#9CA3AF" keyboardType="phone-pad" value={phone} onChangeText={setPhone} />
+                <TextInput style={styles.input} placeholder="Store/Warehouse Name" placeholderTextColor="#9CA3AF" value={storeName} onChangeText={setStoreName} />
+                <TextInput style={styles.input} placeholder="Address" placeholderTextColor="#9CA3AF" value={address} onChangeText={setAddress} />
                 <View style={{ borderWidth: 1, borderColor: '#ddd', borderRadius: 8, paddingHorizontal: 14, marginBottom: 10 }}>
                     <Picker
                         selectedValue={district}
                         onValueChange={(value: string) => handleDistrict(value)}
+                        style={{ color: '#111827' }}
+                        dropdownIconColor="#111827"
+                        mode="dropdown"
                     >
-                        <Picker.Item label="Select District" value="" />
+                        <Picker.Item label="Select District" value="" color="#9CA3AF" style={{ color: '#9CA3AF' }} />
                         {DISTRICTS.map((d) => (
-                            <Picker.Item key={d} label={d} value={d} />
+                            <Picker.Item key={d} label={d} value={d} color="#9CA3AF" style={{ color: '#9CA3AF' }} />
                         ))}
                     </Picker>
                 </View>
@@ -319,10 +322,13 @@ const Signup = () => {
                     <Picker
                         selectedValue={selectedUpazila}
                         onValueChange={(value: string) => setSelectedUpazila(value)}
+                        style={{ color: '#111827' }}
+                        dropdownIconColor="#111827"
+                        mode="dropdown"
                     >
-                        <Picker.Item label="Select Upazila" value="" />
+                        <Picker.Item label="Select Upazila" value="" color="#9CA3AF" style={{ color: '#9CA3AF' }} />
                         {availableUpazilas.map((d) => (
-                            <Picker.Item key={d} label={d} value={d} />
+                            <Picker.Item key={d} label={d} value={d} color="#9CA3AF" style={{ color: '#9CA3AF' }} />
                         ))}
                     </Picker>
                 </View>
@@ -351,6 +357,7 @@ const Signup = () => {
                 <TextInput
                     style={styles.input}
                     placeholder="Password"
+                    placeholderTextColor="#9CA3AF"
                     secureTextEntry
                     value={password}
                     onChangeText={setPassword}
@@ -358,6 +365,7 @@ const Signup = () => {
                 <TextInput
                     style={styles.input}
                     placeholder="Confirm Password"
+                    placeholderTextColor="#9CA3AF"
                     secureTextEntry
                     value={confirmPassword}
                     onChangeText={setConfirmPassword}
@@ -428,6 +436,8 @@ const styles = StyleSheet.create({
         padding: 14,
         marginBottom: 10,
         fontSize: 15,
+        color: '#000000',
+        backgroundColor: '#ffffff',
     },
     toggleRow: {
         flexDirection: 'row',

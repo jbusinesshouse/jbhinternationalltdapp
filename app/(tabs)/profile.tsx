@@ -160,6 +160,8 @@ const IncompleteProfile = ({ onSaved }: { onSaved: () => void }) => {
         borderRadius: 8,
         marginBottom: 10,
         fontSize: 14,
+        color: '#000000',
+        backgroundColor: '#ffffff',
     }
 
     const pickerStyle = {
@@ -181,12 +183,14 @@ const IncompleteProfile = ({ onSaved }: { onSaved: () => void }) => {
 
             <TextInput
                 placeholder="Full Name *"
+                placeholderTextColor="#9CA3AF"
                 value={form.full_name}
                 onChangeText={v => handleChange('full_name', v)}
                 style={inputStyle}
             />
             <TextInput
                 placeholder="Phone *"
+                placeholderTextColor="#9CA3AF"
                 value={form.phone}
                 onChangeText={v => handleChange('phone', v)}
                 style={inputStyle}
@@ -194,6 +198,7 @@ const IncompleteProfile = ({ onSaved }: { onSaved: () => void }) => {
             />
             <TextInput
                 placeholder="Store Name *"
+                placeholderTextColor="#9CA3AF"
                 value={form.store_name}
                 onChangeText={v => handleChange('store_name', v)}
                 style={inputStyle}
@@ -212,6 +217,7 @@ const IncompleteProfile = ({ onSaved }: { onSaved: () => void }) => {
 
             <TextInput
                 placeholder="Address *"
+                placeholderTextColor="#9CA3AF"
                 value={form.address}
                 onChangeText={v => handleChange('address', v)}
                 style={inputStyle}
@@ -222,10 +228,13 @@ const IncompleteProfile = ({ onSaved }: { onSaved: () => void }) => {
                 <Picker
                     selectedValue={form.district}
                     onValueChange={handleDistrict}
+                    style={{ color: '#111827' }}
+                    dropdownIconColor="#111827"
+                    mode="dropdown"
                 >
-                    <Picker.Item label="Select District *" value="" />
+                    <Picker.Item label="Select District *" value="" color="#9CA3AF" style={{ color: '#9CA3AF' }} />
                     {DISTRICTS.map(d => (
-                        <Picker.Item key={d} label={d} value={d} />
+                        <Picker.Item key={d} label={d} value={d} color="#9CA3AF" style={{ color: '#9CA3AF' }} />
                     ))}
                 </Picker>
             </View>
@@ -236,10 +245,13 @@ const IncompleteProfile = ({ onSaved }: { onSaved: () => void }) => {
                     selectedValue={form.upazila}
                     onValueChange={v => handleChange('upazila', v)}
                     enabled={!!form.district}
+                    style={{ color: '#111827' }}
+                    dropdownIconColor="#111827"
+                    mode="dropdown"
                 >
-                    <Picker.Item label="Select Upazila *" value="" />
+                    <Picker.Item label="Select Upazila *" value="" color="#9CA3AF" style={{ color: '#9CA3AF' }} />
                     {availableUpazilas.map(u => (
-                        <Picker.Item key={u} label={u} value={u} />
+                        <Picker.Item key={u} label={u} value={u} color="#9CA3AF" style={{ color: '#9CA3AF' }} />
                     ))}
                 </Picker>
             </View>
@@ -482,6 +494,7 @@ const Profile = () => {
                                 onChangeText={setName}
                                 style={styles.input}
                                 placeholder="Your name"
+                                placeholderTextColor="#9CA3AF"
                             />
                             <View style={styles.editActions}>
                                 <Pressable

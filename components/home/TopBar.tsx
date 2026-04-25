@@ -118,6 +118,7 @@ const TopBar = () => {
                 <TextInput
                     style={styles.searchInp}
                     placeholder='Search For Products'
+                    placeholderTextColor="#9CA3AF"
                     value={searchVal}
                     onChangeText={handleInp}
                 />
@@ -193,11 +194,12 @@ const styles = StyleSheet.create({
     },
     searchInp: {
         height: 50,
-        backgroundColor: '#ffffff',
         borderRadius: 8,
         paddingLeft: 15,
         paddingRight: 75,
-        fontSize: 16
+        fontSize: 16,
+        color: '#000000',
+        backgroundColor: '#ffffff',
     },
     searchBtn: {
         width: 55,

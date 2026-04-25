@@ -68,10 +68,11 @@ export const styles = StyleSheet.create({
     input: {
         width: '100%',
         height: 42,
-        backgroundColor: '#f1f1f1',
         borderRadius: 8,
         paddingHorizontal: 12,
         marginBottom: 10,
+        color: '#000000',
+        backgroundColor: '#ffffff',
     },
 
     editActions: {

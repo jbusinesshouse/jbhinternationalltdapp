@@ -21,11 +21,12 @@ export const styles = StyleSheet.create({
     },
     searchInp: {
         height: 40,
-        backgroundColor: '#f1f1f1ff',
         borderRadius: 20,
         paddingLeft: 15,
         paddingRight: 75,
-        fontSize: 14
+        fontSize: 14,
+        color: '#000000',
+        backgroundColor: '#ffffff',
     },
     searchBtn: {
         width: 55,
@@ -228,6 +229,8 @@ export const styles = StyleSheet.create({
         width: 60,
         fontSize: 14,
         textAlign: 'center',
+        color: '#000000',
+        backgroundColor: '#ffffff',
     },
     sizeInc: {
         fontSize: 20,

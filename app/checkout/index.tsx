@@ -241,6 +241,7 @@ const Checkout = () => {
                 {/* FORM */}
                 <TextInput
                     placeholder="Full Name *"
+                    placeholderTextColor="#9CA3AF"
                     value={form.full_name}
                     onChangeText={(v) => handleChange("full_name", v)}
                     style={input}
@@ -248,6 +249,7 @@ const Checkout = () => {
 
                 <TextInput
                     placeholder="Phone Number *"
+                    placeholderTextColor="#9CA3AF"
                     value={form.phone}
                     onChangeText={(v) => handleChange("phone", v)}
                     style={input}
@@ -256,6 +258,7 @@ const Checkout = () => {
 
                 <TextInput
                     placeholder="Email (optional)"
+                    placeholderTextColor="#9CA3AF"
                     value={form.email}
                     onChangeText={(v) => handleChange("email", v)}
                     style={input}
@@ -263,6 +266,7 @@ const Checkout = () => {
 
                 <TextInput
                     placeholder="City *"
+                    placeholderTextColor="#9CA3AF"
                     value={form.city}
                     onChangeText={(v) => handleChange("city", v)}
                     style={input}
@@ -270,6 +274,7 @@ const Checkout = () => {
 
                 <TextInput
                     placeholder="Delivery Address *"
+                    placeholderTextColor="#9CA3AF"
                     value={form.address}
                     onChangeText={(v) => handleChange("address", v)}
                     style={[input, { height: 80 }]}
@@ -336,6 +341,8 @@ const input = {
     padding: 12,
     borderRadius: 8,
     marginBottom: 10,
+    color: '#000000',
+    backgroundColor: '#ffffff',
 };
 
 const btn = {

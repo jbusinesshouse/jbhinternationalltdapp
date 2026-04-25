@@ -585,9 +585,9 @@ const ProductUpload = () => {
                 )}
 
                 <View style={styles.section}>
-                    <TextInput placeholder="Product Name" value={name} onChangeText={setName} style={styles.input} />
-                    <TextInput placeholder="Price (BDT) Per Item" keyboardType="numeric" value={price} onChangeText={setPrice} style={styles.input} />
-                    <TextInput placeholder="MOQ" keyboardType="numeric" value={moq} onChangeText={setMoq} style={styles.input} />
+                    <TextInput placeholder="Product Name" placeholderTextColor="#9CA3AF" value={name} onChangeText={setName} style={styles.input} />
+                    <TextInput placeholder="Price (BDT) Per Item" placeholderTextColor="#9CA3AF" keyboardType="numeric" value={price} onChangeText={setPrice} style={styles.input} />
+                    <TextInput placeholder="MOQ" placeholderTextColor="#9CA3AF" keyboardType="numeric" value={moq} onChangeText={setMoq} style={styles.input} />
                     {/* <TextInput placeholder="Description" multiline value={description} onChangeText={setDescription} style={styles.textarea} /> */}
                     <RichTextEditor value={description} onChange={setDescription} />
                 </View>
@@ -599,6 +599,7 @@ const ProductUpload = () => {
                             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
                                 <TextInput
                                     placeholder="Color (e.g. Red)"
+                                    placeholderTextColor="#9CA3AF"
                                     value={variant.color}
                                     onChangeText={(t) => {
                                         const v = [...variants]; v[vIdx].color = t; setVariants(v);
@@ -633,6 +634,7 @@ const ProductUpload = () => {
                                     <View style={{ width: 60 }}><Text style={{ fontWeight: '600' }}>{sEntry.label}:</Text></View>
                                     <TextInput
                                         placeholder="Quantity"
+                                        placeholderTextColor="#9CA3AF"
                                         keyboardType="number-pad"
                                         value={sEntry.stock}
                                         scrollEnabled={false}

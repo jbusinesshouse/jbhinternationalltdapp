@@ -117,6 +117,7 @@ const Support = () => {
                     value={subject}
                     onChangeText={setSubject}
                     placeholder="Briefly describe your issue"
+                    placeholderTextColor="#9CA3AF"
                     style={styles.input}
                 />
 
@@ -125,6 +126,7 @@ const Support = () => {
                     value={message}
                     onChangeText={setMessage}
                     placeholder="Write your message here..."
+                    placeholderTextColor="#9CA3AF"
                     style={[styles.input, styles.textArea]}
                     multiline
                     numberOfLines={5}

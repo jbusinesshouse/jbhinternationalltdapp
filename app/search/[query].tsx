@@ -157,6 +157,7 @@ const Search = () => {
                         onChangeText={setSearchVal}
                         style={prodStyles.searchInp}
                         placeholder="Search For Products"
+                        placeholderTextColor="#9CA3AF"
                     />
 
                     <TouchableOpacity

@@ -131,6 +131,7 @@ const SingleMessage = () => {
                 <TextInput
                     style={styles.messageInp}
                     placeholder='message For Products'
+                    placeholderTextColor="#9CA3AF"
                     value={messageVal}
                     onChangeText={(text) => handleInp(text)}
                 />
@@ -242,6 +243,8 @@ const styles = StyleSheet.create({
         paddingHorizontal: 10,
         borderRadius: 30,
         marginRight: 15,
+        color: '#000000',
+        backgroundColor: '#ffffff',
     },
     sendBtn: {
         width: 50,

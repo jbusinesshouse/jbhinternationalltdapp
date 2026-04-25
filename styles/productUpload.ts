@@ -116,11 +116,12 @@ export const styles = StyleSheet.create({
     /* ===== INPUT ===== */
     input: {
         height: 42,
-        backgroundColor: '#f1f1f1ff',
         borderRadius: 8,
         paddingHorizontal: 12,
         fontSize: 14,
-        marginBottom: 10
+        marginBottom: 10,
+        color: '#000000',
+        backgroundColor: '#ffffff',
     },
 
     textarea: {
