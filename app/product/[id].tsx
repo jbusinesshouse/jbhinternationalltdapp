@@ -272,6 +272,15 @@ const ProductPreview = () => {
         ]
         : [];
 
+    const handleSearch = () => {
+        if (!searchVal?.trim()) return
+
+        router.push({
+            pathname: '/search/[query]',
+            params: { query: searchVal }
+        })
+    }
+
     const calculatedWidth = width - 80;
 
     return (
@@ -293,6 +302,10 @@ const ProductPreview = () => {
                         placeholderTextColor="#9CA3AF"
                         value={searchVal}
                         onChangeText={setSearchVal}
+                        returnKeyType="search"
+                        onSubmitEditing={() => {
+                            handleSearch();
+                        }}
                     />
                 </View>
             </View>
