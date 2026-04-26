@@ -1,6 +1,7 @@
 import { useAuth } from '@/hooks/useAuth'
 import { supabase } from '@/lib/supabase'
 import { Picker } from '@react-native-picker/picker'
+import Checkbox from 'expo-checkbox'
 import * as ImagePicker from 'expo-image-picker'
 import { router } from 'expo-router'
 import React, { useMemo, useState } from 'react'
@@ -8,6 +9,7 @@ import {
     ActivityIndicator,
     Alert,
     Image,
+    Linking,
     ScrollView,
     StyleSheet,
     Text,
@@ -86,6 +88,10 @@ const UPAZILA = [
 ];
 
 
+const PRIVACY_POLICY_URL = "https://sites.google.com/view/jbhinternational-privacypolicy?usp=sharing"
+const TERMS_AND_CONDITIONS_URL = "https://sites.google.com/view/termcondition-jbhinternational?usp=sharing"
+
+
 const Signup = () => {
     const [loading, setLoading] = useState(false)
 
@@ -102,6 +108,7 @@ const Signup = () => {
     // const [upazila, setUpazila] = useState([])
     const [selectedUpazila, setSelectedUpazila] = useState('')
     const [image, setImage] = useState<string | null>(null)
+    const [isChecked, setChecked] = useState(false);
 
     const { setIsSettingUp } = useAuth();
 
@@ -156,7 +163,8 @@ const Signup = () => {
             !storeName ||
             !address ||
             !district ||
-            !selectedUpazila
+            !selectedUpazila ||
+            !isChecked
         ) {
             Alert.alert('Error', 'All required fields must be filled')
             return
@@ -371,6 +379,16 @@ const Signup = () => {
                     onChangeText={setConfirmPassword}
                 />
 
+                <View style={{ flexDirection: 'row' }}>
+                    <Checkbox
+                        style={styles.checkbox}
+                        value={isChecked}
+                        onValueChange={setChecked}
+                        color={isChecked ? '#4630EB' : undefined}
+                    />
+                    <Text style={[styles.acceptRule, { flex: 1 }]}>By checking the box, you agree to our <Text style={{ ...styles.acceptRule, color: 'blue' }} onPress={() => Linking.openURL(PRIVACY_POLICY_URL)}>Privacy Policy</Text> and <Text style={{ ...styles.acceptRule, color: 'blue' }} onPress={() => Linking.openURL(TERMS_AND_CONDITIONS_URL)}>Terms & Conditions</Text>.</Text>
+                </View>
+
                 <TouchableOpacity style={styles.button} onPress={handleSignup}>
                     {loading ? (
                         <ActivityIndicator color="#fff" />
@@ -459,6 +477,13 @@ const styles = StyleSheet.create({
     },
     activeStoreText: {
         color: '#ffffff'
+    },
+    checkbox: {
+        margin: 8
+    },
+    acceptRule: {
+        fontSize: 14,
+        color: '#5e5e5e'
     },
     button: {
         backgroundColor: '#000',

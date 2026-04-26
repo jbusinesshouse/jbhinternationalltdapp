@@ -27,43 +27,76 @@ export default function Index() {
   const [refreshing, setRefreshing] = useState(false);
 
   const fetchProducts = async () => {
-    const { data, error } = await supabase
-      .from("products")
-      .select(`
-      id,
-      name,
-      price,
-      moq,
-      product_images (
-        image_url,
-        is_main
-      )
-    `)
-      .eq("is_deleted", false)
+    try {
+      // 1. Get the current logged-in user
+      const { data: { user } } = await supabase.auth.getUser();
 
-    if (error) {
+      let blockedUserIds: string[] = [];
+
+      // 2. Fetch the list of blocked user IDs if the user is logged in
+      if (user) {
+        const { data: blockData, error: blockError } = await supabase
+          .from('blocks')
+          .select('blocked_id')
+          .eq('blocker_id', user.id);
+
+        if (!blockError && blockData) {
+          // Extract IDs into a simple string array
+          blockedUserIds = blockData.map((b: any) => b.blocked_id);
+        }
+      }
+
+      // 3. Start building the products query
+      let query = supabase
+        .from("products")
+        .select(`
+          id,
+          name,
+          price,
+          moq,
+          seller_id,
+          product_images (
+            image_url,
+            is_main
+          )
+        `)
+        .eq("is_deleted", false)
+        .eq("status", "active");
+
+      // 4. If there are blocked users, exclude their products
+      if (blockedUserIds.length > 0) {
+        // Format: .not('column', 'in', '(id1,id2,id3)')
+        query = query.not('seller_id', 'in', `(${blockedUserIds.join(',')})`);
+      }
+
+      const { data, error } = await query;
+
+      if (error) {
+        throw error;
+      }
+
+      // 5. Format the data for the UI
+      const formattedProducts = data.map((product: any) => {
+        const mainImage = product.product_images?.find(
+          (img: any) => img.is_main === true
+        );
+
+        return {
+          id: product.id,
+          name: product.name,
+          price: product.price,
+          moq: product.moq,
+          productImg: mainImage?.image_url || null,
+        };
+      });
+
+      setProducts(formattedProducts);
+    } catch (error) {
       if (__DEV__) {
-        console.log("Error fetching products:", error)
+        console.log("Error fetching products:", error);
       }
-      return
     }
-
-    const formattedProducts = data.map((product: any) => {
-      const mainImage = product.product_images?.find(
-        (img: any) => img.is_main === true
-      )
-
-      return {
-        id: product.id,
-        name: product.name,
-        price: product.price,
-        moq: product.moq,
-        productImg: mainImage?.image_url || null,
-      }
-    })
-
-    setProducts(formattedProducts)
-  }
+  };
 
   useEffect(() => {
     fetchProducts();

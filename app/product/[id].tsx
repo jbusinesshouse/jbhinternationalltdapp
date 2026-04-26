@@ -1,4 +1,5 @@
 import HtmlRender from "@/components/htmlRender/HtmlRenter";
+import { useUser } from "@/context/UserContext";
 import { supabase } from "@/lib/supabase";
 import { styles } from "@/styles/product";
 import { router, useLocalSearchParams, useNavigation } from "expo-router";
@@ -49,6 +50,8 @@ type Size = {
 /* ================= COMPONENT ================= */
 
 const ProductPreview = () => {
+    const { profile } = useUser();
+
     const [storeType, setStoreType] = useState<string | null>(null);
     const [product, setProduct] = useState<Product | null>(null);
     const [variants, setVariants] = useState<Variant[]>([]);
@@ -447,6 +450,7 @@ const ProductPreview = () => {
 
                                     <View style={styles.sizeController}>
                                         <Pressable
+                                            style={styles.sizeConBtn}
                                             onPress={() =>
                                                 updateQty(
                                                     currentVariant.id,
@@ -475,6 +479,7 @@ const ProductPreview = () => {
                                         />
 
                                         <Pressable
+                                            style={styles.sizeConBtn}
                                             onPress={() =>
                                                 updateQty(
                                                     currentVariant.id,
@@ -502,17 +507,47 @@ const ProductPreview = () => {
                     </View>
                 </View>
 
+
+                <View style={{ paddingVertical: 15, paddingHorizontal: 15, }}>
+                    <Pressable
+                        style={styles.reportBtn}
+                        onPress={
+                            () => {
+                                router.push({
+                                    pathname: "/report/[id]",
+                                    params: { id: product.id, type: 'product' }
+                                })
+                            }
+                        }
+                    >
+                        <Image
+                            source={(require('@/assets/images/icons/flag.png'))}
+                            style={{ width: 15, height: 15, marginRight: 8, }}
+                        />
+                        <Text style={{ fontSize: 12, }}>Report an issue!</Text>
+                    </Pressable>
+                </View>
+
             </ScrollView >
 
             {/* ACTION */}
-            < View style={styles.productAct} >
+            <View style={styles.productAct}>
                 <Pressable
                     style={[
                         styles.productActOrder,
-                        storeType === "wholesale" && { backgroundColor: "#ccc" }
+                        // Disable styling if wholesale OR if account is not active
+                        (storeType === "wholesale" || (profile?.status && profile.status !== 'active')) &&
+                        { backgroundColor: "#ccc" }
                     ]}
-                    disabled={storeType === "wholesale"}
+                    // Disable interaction if wholesale OR if account is not active
+                    disabled={storeType === "wholesale" || (profile?.status && profile.status !== 'active')}
                     onPress={() => {
+                        // 0. Double check status in onPress (Safety check)
+                        if (profile?.status && profile.status !== 'active') {
+                            alert(`Your account is ${profile.status}. You cannot place orders at this time.`);
+                            return;
+                        }
+
                         // 1. Calculate total selected quantity
                         const totalQty = Object.values(selectedQty).reduce((acc, variantSizes) => {
                             return acc + Object.values(variantSizes).reduce((sum, q) => sum + q, 0);
@@ -526,7 +561,7 @@ const ProductPreview = () => {
 
                         // 3. Handle Case: Below Minimum Order Amount
                         if (totalQty < product.moq) {
-                            alert(`Minimum order amount not reached. You need at least ${product.moq} pieces to proceed (Current: ${totalQty})`);
+                            alert(`Minimum order amount not reached. You need at least ${product.moq} pieces to proceed.`);
                             return;
                         }
 
@@ -549,10 +584,17 @@ const ProductPreview = () => {
                     }}
                 >
                     <Text style={styles.productActOrderText}>
-                        {storeType === "wholesale" ? "Only Retailers Can Order" : "Order Now"}
+                        {/* Dynamic Labeling */}
+                        {profile?.status === 'freeze'
+                            ? "Account Frozen"
+                            : profile?.status === 'restricted'
+                                ? "Account Restricted"
+                                : storeType === "wholesale"
+                                    ? "Only Retailers Can Order"
+                                    : "Order Now"}
                     </Text>
                 </Pressable>
-            </View >
+            </View>
 
         </View >
     );

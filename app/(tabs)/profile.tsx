@@ -1,4 +1,5 @@
 import ConfirmModal from '@/components/modal/ConfirmModal'
+import { useUser } from '@/context/UserContext'
 import { useAuth } from '@/hooks/useAuth'
 import { useProfile } from '@/hooks/useProfile'
 import { supabase } from '@/lib/supabase'
@@ -295,6 +296,7 @@ const isProfileComplete = (profile: any): boolean => {
 /* ================= MAIN PROFILE SCREEN ================= */
 
 const Profile = () => {
+    const { profile: stsProfil } = useUser();
     const navigation = useNavigation()
     const router = useRouter()
 
@@ -526,7 +528,7 @@ const Profile = () => {
                 </View>
 
                 <View style={styles.section}>
-                    {isSeller && <ProductUpComp title="Upload Product" />}
+                    {isSeller && stsProfil?.status === "active" && <ProductUpComp title="Upload Product" />}
                     {isSeller && <ProfileLink title="Sales Orders" link="/sales" />}
                     {isBuyer && <ProfileLink title="My Orders" link="/orders" />}
                 </View>

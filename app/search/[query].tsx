@@ -65,27 +65,53 @@ const Search = () => {
         setLoading(true);
 
         try {
+            // 1. Get current user and blocked list
+            const { data: { user } } = await supabase.auth.getUser();
+            let blockedUserIds: string[] = [];
+
+            if (user) {
+                const { data: blockData } = await supabase
+                    .from('blocks')
+                    .select('blocked_id')
+                    .eq('blocker_id', user.id);
+
+                if (blockData) {
+                    blockedUserIds = blockData.map((b: any) => b.blocked_id);
+                }
+            }
+
             const terms = buildSearchTerms(search);
 
+            // 2. Initialize query with seller_id included
             let queryBuilder = supabase
                 .from('products')
                 .select(`
-                    id,
-                    name,
-                    price,
-                    moq,
-                    product_images (
-                        image_url,
-                        is_main
-                    )
-                `)
-                .eq('is_deleted', false);
+                id,
+                name,
+                price,
+                moq,
+                seller_id,
+                product_images (
+                    image_url,
+                    is_main
+                )
+            `)
+                .eq('is_deleted', false)
+                .eq("status", "active");
 
             const orQuery = terms
                 .map(t => `name.ilike.%${t}%`)
                 .join(',');
 
-            const { data, error } = await queryBuilder.or(orQuery);
+            // 3. Apply search terms
+            queryBuilder = queryBuilder.or(orQuery);
+
+            // 4. Apply the Block Filter if IDs exist
+            if (blockedUserIds.length > 0) {
+                queryBuilder = queryBuilder.not('seller_id', 'in', `(${blockedUserIds.join(',')})`);
+            }
+
+            const { data, error } = await queryBuilder;
 
             if (error) {
                 if (__DEV__) {

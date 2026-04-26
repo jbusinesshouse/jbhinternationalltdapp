@@ -1,6 +1,6 @@
 import { supabase } from '@/lib/supabase'
 import { Session, User } from '@supabase/supabase-js'
-import { createContext, useEffect, useState } from 'react'
+import { createContext, useContext, useEffect, useState } from 'react'
 
 type Profile = {
     id: string
@@ -8,6 +8,7 @@ type Profile = {
     district: string | null
     address?: string | null
     avatar_url?: string | null
+    status: 'active' | 'freeze' | 'restricted'
 }
 
 type UserContextType = {
@@ -92,4 +93,13 @@ export const UserProvider = ({ children }: { children: React.ReactNode }) => {
             {children}
         </UserContext.Provider>
     )
+}
+
+
+export const useUser = () => {
+    const context = useContext(UserContext)
+    if (context === undefined) {
+        throw new Error('useUser must be used within a UserProvider')
+    }
+    return context
 }

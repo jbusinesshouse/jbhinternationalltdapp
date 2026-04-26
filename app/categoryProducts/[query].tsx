@@ -74,25 +74,46 @@ export default function CategoryProducts() {
         if (!isRefresh) setLoading(true);
 
         try {
+            // 1. Get current user and blocked list
+            const { data: { user } } = await supabase.auth.getUser();
+            let blockedUserIds: string[] = [];
+
+            if (user) {
+                const { data: blockData } = await supabase
+                    .from('blocks')
+                    .select('blocked_id')
+                    .eq('blocker_id', user.id);
+
+                if (blockData) {
+                    blockedUserIds = blockData.map((b: any) => b.blocked_id);
+                }
+            }
+
+            // 2. Initialize the query
             let queryBuilder = supabase
                 .from("products")
                 .select(`
-                id, name, price, moq, category_id, subcategory_id,
+                id, name, price, moq, category_id, subcategory_id, seller_id,
                 product_images (image_url, is_main)
             `)
                 .eq("category_id", categoryId)
-                .eq('is_deleted', false);
+                .eq('is_deleted', false)
+                .eq("status", "active");
 
+            // 3. Filter by subcategory if selected
             if (selectedSub !== "all") {
                 queryBuilder = queryBuilder.eq("subcategory_id", selectedSub);
+            }
+
+            // 4. Apply the Block Filter if IDs exist
+            if (blockedUserIds.length > 0) {
+                queryBuilder = queryBuilder.not('seller_id', 'in', `(${blockedUserIds.join(',')})`);
             }
 
             const { data, error } = await queryBuilder;
 
             if (error) {
-                if (__DEV__) {
-                    console.error("Product error:", error);
-                }
+                if (__DEV__) console.error("Product error:", error);
                 return;
             }
 
@@ -111,9 +132,7 @@ export default function CategoryProducts() {
                 setProducts([]);
             }
         } catch (err) {
-            if (__DEV__) {
-                console.error("Fetch error:", err);
-            }
+            if (__DEV__) console.error("Fetch error:", err);
         } finally {
             if (!isRefresh) setLoading(false);
         }

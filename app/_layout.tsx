@@ -1,34 +1,54 @@
-import { UserProvider } from '@/context/UserContext'
+import { UserProvider, useUser } from '@/context/UserContext'
 import useAppUpdate from '@/hooks/useAppUpdate'
 import { useProtectedRoute } from "@/hooks/useAuth"
 import { useKeyboardBehavior } from '@/hooks/useKeyboardBehavior'
 import { Stack } from "expo-router"
 import * as SplashScreen from 'expo-splash-screen'
 import { useEffect } from 'react'
-import { Image, KeyboardAvoidingView, StyleSheet, View } from "react-native"
+import { Image, KeyboardAvoidingView, StyleSheet, Text, View } from "react-native"
 
 // ✅ Keep system splash visible until we manually hide it
 SplashScreen.preventAutoHideAsync()
 
-function RootLayoutNav() {
-  const { loading } = useProtectedRoute()
-  useAppUpdate()
+/**
+ * Banner component to show account status warnings
+ */
+const AccountStatusBanner = ({ status }: { status: string }) => {
+  // Map styles based on the enum values
+  const config = {
+    freeze: { color: '#ef4444', text: 'Your account is frozen. Please contact support.' },
+    restricted: { color: '#f59e0b', text: 'Your account is restricted. Some features may be limited.' }
+  }[status as 'freeze' | 'restricted'] || { color: '#6b7280', text: 'Account notice' };
 
-  // ✅ Hide splash only when app is ready
+  return (
+    <View style={[styles.banner, { backgroundColor: config.color }]}>
+      <Text style={styles.bannerText}>{config.text}</Text>
+    </View>
+  );
+};
+
+function RootLayoutNav() {
+  const { profile, loading: userLoading } = useUser();
+  const { loading: authLoading } = useProtectedRoute();
+
+  useAppUpdate();
+
+  // Combine both loading states to ensure we have auth AND profile data before showing the app
+  const isAppReady = !authLoading && !userLoading;
+
   useEffect(() => {
     const hide = async () => {
-      if (!loading) {
+      if (isAppReady) {
         // small delay reduces MIUI black flash risk
-        await new Promise(res => setTimeout(res, 70))
-        await SplashScreen.hideAsync()
+        await new Promise(res => setTimeout(res, 70));
+        await SplashScreen.hideAsync();
       }
     }
+    hide();
+  }, [isAppReady]);
 
-    hide()
-  }, [loading])
-
-  // ✅ Custom splash (MATCHES your contain-style native splash)
-  if (loading) {
+  // Render Custom Splash if not ready
+  if (!isAppReady) {
     return (
       <View style={styles.splash}>
         <Image
@@ -41,13 +61,20 @@ function RootLayoutNav() {
   }
 
   return (
-    <Stack screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-      <Stack.Screen name="product/[id]" options={{ headerShown: false }} />
-      <Stack.Screen name="search/[query]" options={{ headerShown: false }} />
-      <Stack.Screen name="messages/[id]" options={{ headerShown: false }} />
-    </Stack>
+    <View style={{ flex: 1 }}>
+      {/* ✅ Banner shows above the stack if status is not 'active' */}
+      {profile?.status && profile.status !== 'active' && (
+        <AccountStatusBanner status={profile.status} />
+      )}
+
+      <Stack screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="(auth)" />
+        <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="product/[id]" />
+        <Stack.Screen name="search/[query]" />
+        <Stack.Screen name="messages/[id]" />
+      </Stack>
+    </View>
   )
 }
 
@@ -74,10 +101,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-
-  // ✅ matches your expo splash config (imageWidth: 200 + contain)
   logo: {
     width: 200,
     height: 200
+  },
+  banner: {
+    // Note: If you don't use a SafeAreaView, you need padding for the status bar
+    paddingTop: 50,
+    paddingBottom: 12,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1000,
+  },
+  bannerText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 14,
+    textAlign: 'center',
   }
 })

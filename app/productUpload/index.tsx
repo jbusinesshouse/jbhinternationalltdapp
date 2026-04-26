@@ -1,4 +1,5 @@
 import RichTextEditor from '@/components/textEditor/RichTextEditor';
+import { useUser } from '@/context/UserContext';
 import { supabase } from '@/lib/supabase';
 import { styles } from '@/styles/productUpload';
 import Feather from '@expo/vector-icons/Feather';
@@ -46,6 +47,7 @@ type Subcategory = {
 }
 
 const ProductUpload = () => {
+    const { profile } = useUser();
     const navigation = useNavigation();
 
     const [availableSizes, setAvailableSizes] = useState<DbSize[]>([]);
@@ -320,6 +322,13 @@ const ProductUpload = () => {
 
     // Submit handler
     const handleSubmit = async () => {
+        if (profile?.status && profile.status !== 'active') {
+            Alert.alert(
+                'Action Restricted',
+                `Your account is currently ${profile.status === "freeze" ? "frozen" : profile.status}. You cannot upload new products.`
+            );
+            return;
+        }
         // Validate form
         const validationError = validateForm();
         if (validationError) {
@@ -461,7 +470,7 @@ const ProductUpload = () => {
 
             Alert.alert(
                 'Success',
-                'Product uploaded successfully!',
+                'Product uploaded successfully! Your product is sent for approval.',
                 [
                     {
                         text: 'OK',
@@ -660,14 +669,24 @@ const ProductUpload = () => {
 
                 <View style={styles.submitWrapper}>
                     <Pressable
-                        style={[styles.submitBtn, isSubmitting && { opacity: 0.6 }]}
+                        style={[
+                            styles.submitBtn,
+                            (isSubmitting || (profile?.status && profile.status !== 'active')) && { opacity: 0.6, backgroundColor: '#9ca3af' }
+                        ]}
                         onPress={handleSubmit}
-                        disabled={isSubmitting}
+                        // Disable if submitting OR if account is not active
+                        disabled={isSubmitting || (profile?.status && profile.status !== 'active')}
                     >
                         {isSubmitting ? (
                             <ActivityIndicator color="#fff" />
                         ) : (
-                            <Text style={styles.submitText}>Upload Product</Text>
+                            <Text style={styles.submitText}>
+                                {profile?.status === 'freeze'
+                                    ? "Account Frozen"
+                                    : profile?.status === 'restricted'
+                                        ? "Upload Restricted"
+                                        : "Upload Product"}
+                            </Text>
                         )}
                     </Pressable>
                 </View>

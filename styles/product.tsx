@@ -289,6 +289,21 @@ export const styles = StyleSheet.create({
     },
 
 
+    reportBtn: {
+        // flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'flex-start',
+        alignSelf: 'flex-start',
+        paddingHorizontal: 6,
+        paddingVertical: 6,
+        backgroundColor: '#ffffff',
+        borderWidth: 1,
+        borderColor: '#cccccc',
+        borderRadius: 4,
+    },
+
+
 
     productAct: {
         width: '100%',

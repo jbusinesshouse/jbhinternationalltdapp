@@ -1,4 +1,5 @@
 import RichTextEditor from '@/components/textEditor/RichTextEditor';
+import { useUser } from '@/context/UserContext';
 import { supabase } from '@/lib/supabase';
 import { styles } from '@/styles/productUpload';
 import Feather from '@expo/vector-icons/Feather';
@@ -48,6 +49,7 @@ type Subcategory = {
 }
 
 const EditProduct = () => {
+    const { profile } = useUser();
     const navigation = useNavigation();
     const { id } = useLocalSearchParams<{ id: string }>();
 
@@ -345,6 +347,14 @@ const EditProduct = () => {
 
     // ─── Submit ────────────────────────────────────────────────────────────────
     const handleSubmit = async () => {
+        if (profile?.status && profile.status !== 'active') {
+            Alert.alert(
+                'Action Restricted',
+                `Your account is currently ${profile.status === "freeze" ? "frozen" : profile.status}. You cannot edit your products.`
+            );
+            return;
+        }
+
         const validationError = validateForm();
         if (validationError) {
             Alert.alert('Validation Error', validationError);
@@ -704,7 +714,10 @@ const EditProduct = () => {
                 {/* ── Submit ── */}
                 <View style={styles.submitWrapper}>
                     <Pressable
-                        style={[styles.submitBtn, isSubmitting && { opacity: 0.6 }]}
+                        style={[
+                            styles.submitBtn,
+                            (isSubmitting || (profile?.status && profile.status !== 'active')) && { opacity: 0.6, backgroundColor: '#9ca3af' }
+                        ]}
                         onPress={handleSubmit}
                         disabled={isSubmitting}
                     >
