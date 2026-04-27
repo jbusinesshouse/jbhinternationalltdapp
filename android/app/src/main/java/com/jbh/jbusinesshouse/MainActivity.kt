@@ -1,4 +1,4 @@
-package com.jbh.jbusinesshouse
+package com.jbh.internationallimited
 import expo.modules.splashscreen.SplashScreenManager
 
 import android.os.Build
