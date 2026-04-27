@@ -87,9 +87,9 @@ android {
     buildToolsVersion rootProject.ext.buildToolsVersion
     compileSdk rootProject.ext.compileSdkVersion
 
-    namespace 'com.jbh.jbusinesshouse'
+    namespace 'com.jbh.internationallimited'
     defaultConfig {
-        applicationId 'com.jbh.jbusinesshouse'
+        applicationId 'com.jbh.internationallimited'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
