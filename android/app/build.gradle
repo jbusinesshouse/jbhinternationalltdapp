@@ -104,7 +104,6 @@ android {
             keyAlias 'androiddebugkey'
             keyPassword 'android'
         }
-
         release {
             storeFile file('upload-keystore.jks')
             storePassword System.getenv("MYAPP_UPLOAD_STORE_PASSWORD")
