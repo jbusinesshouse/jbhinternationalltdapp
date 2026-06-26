@@ -1,4 +1,4 @@
-name: Build Android AAB
+name: Build Android AAB and APK
 
 on:
   push:
@@ -37,12 +37,49 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # ✅ Create env file
+      # ✅ Create env file to prevent Supabase init race conditions
       - name: Create .env file
         run: |
           echo "EXPO_PUBLIC_SUPABASE_URL=${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}" > .env
           echo "EXPO_PUBLIC_SUPABASE_ANON_KEY=${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}" >> .env
 
+      # 🚀 ✅ Generate fresh android folder dynamically out of app.json config
+      - name: Prebuild Native Android Folder
+        run: npx expo prebuild --platform android --no-install
+
+      # ✅ Decode keystore into the newly generated directory paths
+      - name: Decode keystore
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > android/app/upload-keystore.jks
+
+      # ✅ Verify keystore exists
+      - name: Verify keystore exists
+        run: ls -la android/app/upload-keystore.jks
+
+      # 📝 ✅ Auto-inject the release signing configurations into the generated build.gradle file
+      - name: Inject Release Signing Configuration
+        run: |
+          node -e "
+          const fs = require('fs');
+          const filePath = 'android/app/build.gradle';
+          let content = fs.readFileSync(filePath, 'utf8');
+          
+          const releaseSigningConfigs = \`
+                  release {
+                      storeFile file('upload-keystore.jks')
+                      storePassword System.getenv('MYAPP_UPLOAD_STORE_PASSWORD')
+                      keyAlias System.getenv('MYAPP_UPLOAD_KEY_ALIAS')
+                      keyPassword System.getenv('MYAPP_UPLOAD_KEY_PASSWORD')
+                  }
+          \`;
+          
+          // Inject signing configs details directly into signingConfigs block
+          content = content.replace('signingConfigs {', 'signingConfigs {' + releaseSigningConfigs);
+          // Overwrite build types configuration to sign release builds using the release keystore profile
+          content = content.replace('signingConfig signingConfigs.debug', 'signingConfig signingConfigs.release');
+          
+          fs.writeFileSync(filePath, content, 'utf8');
+          "
 
       # ✅ Debug which Node Gradle will use (remove after confirming fix)
       - name: Debug Node path
@@ -50,13 +87,6 @@ jobs:
           which node
           node --version
           echo $PATH
-
-      - name: Decode keystore
-        run: |
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > android/app/upload-keystore.jks
-
-      - name: Verify keystore exists
-        run: ls -la android/app/upload-keystore.jks
 
       # ✅ Explicitly pass node binary so Gradle uses Node 20, not system default
       - name: Build AAB

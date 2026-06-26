@@ -52,6 +52,16 @@
         {
           "photosPermission": "The app accesses your photos to create an account and uploading products."
         }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "extraProperties": {
+              "MYAPP_UPLOAD_STORE_FILE": "upload-keystore.jks"
+            }
+          }
+        }
       ]
     ],
     "experiments": {
