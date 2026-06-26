@@ -7,8 +7,7 @@ import * as SplashScreen from 'expo-splash-screen'
 import { useEffect } from 'react'
 import { Image, KeyboardAvoidingView, StyleSheet, Text, View } from "react-native"
 
-// ✅ Keep system splash visible until we manually hide it
-SplashScreen.preventAutoHideAsync()
+SplashScreen.preventAutoHideAsync().catch(() => {})
 
 /**
  * Banner component to show account status warnings
@@ -28,27 +27,34 @@ const AccountStatusBanner = ({ status }: { status: string }) => {
 };
 
 function RootLayoutNav() {
-  const { profile, loading: userLoading } = useUser();
-  const { loading: authLoading } = useProtectedRoute();
+  const { profile, loading } = useUser();
+  useProtectedRoute();
 
   useAppUpdate();
 
-  // Combine both loading states to ensure we have auth AND profile data before showing the app
-  const isAppReady = !authLoading && !userLoading;
-
+  // Hide native splash on mount — don't gate on auth (prevents permanent freeze)
   useEffect(() => {
-    const hide = async () => {
-      if (isAppReady) {
-        // small delay reduces MIUI black flash risk
-        await new Promise(res => setTimeout(res, 70));
-        await SplashScreen.hideAsync();
-      }
-    }
-    hide();
-  }, [isAppReady]);
+    let cancelled = false;
 
-  // Render Custom Splash if not ready
-  if (!isAppReady) {
+    const hideSplash = async () => {
+      await new Promise((res) => setTimeout(res, 70));
+      if (!cancelled) {
+        await SplashScreen.hideAsync().catch(() => {});
+      }
+    };
+    hideSplash();
+
+    const fallback = setTimeout(() => {
+      SplashScreen.hideAsync().catch(() => {});
+    }, 5000);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(fallback);
+    };
+  }, []);
+
+  if (loading) {
     return (
       <View style={styles.splash}>
         <Image

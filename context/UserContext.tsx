@@ -50,13 +50,19 @@ export const UserProvider = ({ children }: { children: React.ReactNode }) => {
     }
 
     useEffect(() => {
-        // Initial Session Load
-        supabase.auth.getSession().then(({ data: { session } }) => {
-            setSession(session)
-            setUser(session?.user ?? null)
-            if (session?.user) fetchProfile(session.user.id)
-            setLoading(false)
-        })
+        // Initial Session Load — always clear loading even if getSession rejects
+        supabase.auth.getSession()
+            .then(({ data: { session } }) => {
+                setSession(session)
+                setUser(session?.user ?? null)
+                if (session?.user) fetchProfile(session.user.id)
+            })
+            .catch((err) => {
+                if (__DEV__) {
+                    console.warn('getSession failed:', err)
+                }
+            })
+            .finally(() => setLoading(false))
 
         // Listen for Auth changes
         const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
