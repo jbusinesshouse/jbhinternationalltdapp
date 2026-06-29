@@ -1,43 +1,53 @@
 import Constants from 'expo-constants'
 import { useEffect } from 'react'
-import { Platform } from 'react-native'
+import { InteractionManager, Platform } from 'react-native'
+
+const UPDATE_CHECK_TIMEOUT_MS = 8000
+const UPDATE_CHECK_DELAY_MS = 2000
 
 export default function useAppUpdate() {
     useEffect(() => {
-        checkUpdate()
-    }, [])
+        let cancelled = false
+        let timer: ReturnType<typeof setTimeout> | undefined
 
-    const checkUpdate = async () => {
-        // 1. Exit early if on Web or iOS (if you only want Android updates)
-        if (Platform.OS !== 'android') return
+        const interaction = InteractionManager.runAfterInteractions(() => {
+            timer = setTimeout(async () => {
+                if (cancelled) return
 
-        // 2. Exit early if in Expo Go
-        // Constants.appOwnership === 'expo' means you are in the Expo Go app
-        if (Constants.appOwnership === 'expo') {
-            if (__DEV__) {
-                console.log('Skipping update check: Not supported in Expo Go');
-            }
-            return;
-        }
+                if (Platform.OS !== 'android') return
+                if (Constants.appOwnership === 'expo') return
 
-        try {
-            // 3. LAZY IMPORT the module here
-            // This prevents the "Cannot find native module" error on startup
-            const InAppUpdates = await import('expo-in-app-updates');
+                try {
+                    const InAppUpdates = await import('expo-in-app-updates')
 
-            const result = await InAppUpdates.checkForUpdate()
+                    const result = await Promise.race([
+                        InAppUpdates.checkForUpdate(),
+                        new Promise<never>((_, reject) =>
+                            setTimeout(() => reject(new Error('Update check timed out')), UPDATE_CHECK_TIMEOUT_MS)
+                        ),
+                    ])
 
-            if (result.updateAvailable) {
-                if (result.immediateAllowed) {
-                    await InAppUpdates.startUpdate(true)
-                } else if (result.flexibleAllowed) {
-                    await InAppUpdates.startUpdate(false)
+                    if (cancelled) return
+
+                    if (result.updateAvailable) {
+                        if (result.immediateAllowed) {
+                            await InAppUpdates.startUpdate(true)
+                        } else if (result.flexibleAllowed) {
+                            await InAppUpdates.startUpdate(false)
+                        }
+                    }
+                } catch (e) {
+                    if (__DEV__) {
+                        console.log('Update check failed:', e)
+                    }
                 }
-            }
-        } catch (e) {
-            if (__DEV__) {
-                console.log('Update check failed:', e)
-            }
+            }, UPDATE_CHECK_DELAY_MS)
+        })
+
+        return () => {
+            cancelled = true
+            if (timer) clearTimeout(timer)
+            interaction.cancel()
         }
-    }
+    }, [])
 }

@@ -4,8 +4,8 @@ import { useProtectedRoute } from "@/hooks/useAuth"
 import { useKeyboardBehavior } from '@/hooks/useKeyboardBehavior'
 import { Stack } from "expo-router"
 import * as SplashScreen from 'expo-splash-screen'
-import { useEffect } from 'react'
-import { Image, KeyboardAvoidingView, StyleSheet, Text, View } from "react-native"
+import { useCallback, useEffect } from 'react'
+import { KeyboardAvoidingView, StyleSheet, Text, View } from "react-native"
 
 SplashScreen.preventAutoHideAsync().catch(() => {})
 
@@ -27,47 +27,25 @@ const AccountStatusBanner = ({ status }: { status: string }) => {
 };
 
 function RootLayoutNav() {
-  const { profile, loading } = useUser();
+  const { profile } = useUser();
   useProtectedRoute();
 
   useAppUpdate();
 
-  // Hide native splash on mount — don't gate on auth (prevents permanent freeze)
-  useEffect(() => {
-    let cancelled = false;
-
-    const hideSplash = async () => {
-      await new Promise((res) => setTimeout(res, 70));
-      if (!cancelled) {
-        await SplashScreen.hideAsync().catch(() => {});
-      }
-    };
-    hideSplash();
-
-    const fallback = setTimeout(() => {
-      SplashScreen.hideAsync().catch(() => {});
-    }, 5000);
-
-    return () => {
-      cancelled = true;
-      clearTimeout(fallback);
-    };
+  const onLayoutRootView = useCallback(() => {
+    SplashScreen.hideAsync().catch(() => {});
   }, []);
 
-  if (loading) {
-    return (
-      <View style={styles.splash}>
-        <Image
-          source={require('../assets/images/splash.png')}
-          style={styles.logo}
-          resizeMode="contain"
-        />
-      </View>
-    )
-  }
+  // Cold starts can fire onLayout before the native splash module is ready — retry dismiss
+  useEffect(() => {
+    const retries = [100, 500, 1500, 3000].map((ms) =>
+      setTimeout(() => SplashScreen.hideAsync().catch(() => {}), ms)
+    );
+    return () => retries.forEach(clearTimeout);
+  }, []);
 
   return (
-    <View style={{ flex: 1 }}>
+    <View style={{ flex: 1 }} onLayout={onLayoutRootView}>
       {/* ✅ Banner shows above the stack if status is not 'active' */}
       {profile?.status && profile.status !== 'active' && (
         <AccountStatusBanner status={profile.status} />
@@ -101,16 +79,6 @@ export default function RootLayout() {
 }
 
 const styles = StyleSheet.create({
-  splash: {
-    flex: 1,
-    backgroundColor: '#ffffff',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  logo: {
-    width: 200,
-    height: 200
-  },
   banner: {
     // Note: If you don't use a SafeAreaView, you need padding for the status bar
     paddingTop: 50,

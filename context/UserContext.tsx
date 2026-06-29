@@ -24,6 +24,23 @@ type UserContextType = {
 
 export const UserContext = createContext<UserContextType | undefined>(undefined)
 
+const AUTH_INIT_TIMEOUT_MS = 4000
+
+function withTimeout<T>(promise: PromiseLike<T>, ms: number, label: string): Promise<T> {
+    return new Promise((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms)
+        Promise.resolve(promise)
+            .then((value) => {
+                clearTimeout(timer)
+                resolve(value)
+            })
+            .catch((err) => {
+                clearTimeout(timer)
+                reject(err)
+            })
+    })
+}
+
 export const UserProvider = ({ children }: { children: React.ReactNode }) => {
     const [session, setSession] = useState<Session | null>(null)
     const [user, setUser] = useState<User | null>(null)
@@ -50,22 +67,33 @@ export const UserProvider = ({ children }: { children: React.ReactNode }) => {
     }
 
     useEffect(() => {
-        // Initial Session Load — always clear loading even if getSession rejects
-        supabase.auth.getSession()
-            .then(({ data: { session } }) => {
+        let mounted = true
+
+        const initAuth = async () => {
+            try {
+                const { data: { session } } = await withTimeout(
+                    supabase.auth.getSession(),
+                    AUTH_INIT_TIMEOUT_MS,
+                    'getSession',
+                )
+                if (!mounted) return
                 setSession(session)
                 setUser(session?.user ?? null)
                 if (session?.user) fetchProfile(session.user.id)
-            })
-            .catch((err) => {
+            } catch (err) {
                 if (__DEV__) {
-                    console.warn('getSession failed:', err)
+                    console.warn('Auth init failed:', err)
                 }
-            })
-            .finally(() => setLoading(false))
+            } finally {
+                if (mounted) setLoading(false)
+            }
+        }
 
-        // Listen for Auth changes
+        initAuth()
+
+        // Listen for Auth changes — may resolve after getSession times out on cold start
         const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+            if (!mounted) return
             setSession(session)
             setUser(session?.user ?? null)
             if (session?.user) {
@@ -76,7 +104,10 @@ export const UserProvider = ({ children }: { children: React.ReactNode }) => {
             setLoading(false)
         })
 
-        return () => subscription.unsubscribe()
+        return () => {
+            mounted = false
+            subscription.unsubscribe()
+        }
     }, [])
 
     const signOut = async () => {
