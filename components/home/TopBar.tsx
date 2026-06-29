@@ -1,6 +1,7 @@
+import { useUser } from '@/context/UserContext'
 import { supabase } from '@/lib/supabase'
 import { router } from 'expo-router'
-import React, { useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 import {
     Image,
     StyleSheet,
@@ -11,6 +12,7 @@ import {
 } from 'react-native'
 
 const TopBar = () => {
+    const { user, loading: authLoading } = useUser()
     const [activeInd, setActiveInd] = useState(0)
     const [searchVal, setSearchVal] = useState('')
 
@@ -34,10 +36,8 @@ const TopBar = () => {
         })
     }
 
-    const fetchUnreadNotifications = async () => {
+    const fetchUnreadNotifications = useCallback(async () => {
         try {
-            const { data: { user } } = await supabase.auth.getUser()
-
             if (!user) return
 
             const { count, error } = await supabase
@@ -60,16 +60,17 @@ const TopBar = () => {
                 console.log('Notification error:', err)
             }
         }
-    }
+    }, [user])
 
     useEffect(() => {
+        if (authLoading) return
+
         fetchUnreadNotifications()
 
-        // optional: refresh every 10s (light real-time effect)
         const interval = setInterval(fetchUnreadNotifications, 10000)
 
         return () => clearInterval(interval)
-    }, [])
+    }, [authLoading, fetchUnreadNotifications])
 
     return (
         <View style={styles.container}>

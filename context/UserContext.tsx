@@ -26,21 +26,6 @@ export const UserContext = createContext<UserContextType | undefined>(undefined)
 
 const AUTH_INIT_TIMEOUT_MS = 4000
 
-function withTimeout<T>(promise: PromiseLike<T>, ms: number, label: string): Promise<T> {
-    return new Promise((resolve, reject) => {
-        const timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms)
-        Promise.resolve(promise)
-            .then((value) => {
-                clearTimeout(timer)
-                resolve(value)
-            })
-            .catch((err) => {
-                clearTimeout(timer)
-                reject(err)
-            })
-    })
-}
-
 export const UserProvider = ({ children }: { children: React.ReactNode }) => {
     const [session, setSession] = useState<Session | null>(null)
     const [user, setUser] = useState<User | null>(null)
@@ -68,44 +53,36 @@ export const UserProvider = ({ children }: { children: React.ReactNode }) => {
 
     useEffect(() => {
         let mounted = true
+        let authReady = false
 
-        const initAuth = async () => {
-            try {
-                const { data: { session } } = await withTimeout(
-                    supabase.auth.getSession(),
-                    AUTH_INIT_TIMEOUT_MS,
-                    'getSession',
-                )
-                if (!mounted) return
-                setSession(session)
-                setUser(session?.user ?? null)
-                if (session?.user) fetchProfile(session.user.id)
-            } catch (err) {
-                if (__DEV__) {
-                    console.warn('Auth init failed:', err)
-                }
-            } finally {
-                if (mounted) setLoading(false)
-            }
+        const markReady = () => {
+            if (!mounted || authReady) return
+            authReady = true
+            setLoading(false)
         }
 
-        initAuth()
+        const timeout = setTimeout(markReady, AUTH_INIT_TIMEOUT_MS)
 
-        // Listen for Auth changes — may resolve after getSession times out on cold start
-        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
             if (!mounted) return
+
             setSession(session)
             setUser(session?.user ?? null)
+
+            if (event === 'INITIAL_SESSION') {
+                markReady()
+            }
+
             if (session?.user) {
                 await fetchProfile(session.user.id)
             } else {
                 setProfile(null)
             }
-            setLoading(false)
         })
 
         return () => {
             mounted = false
+            clearTimeout(timeout)
             subscription.unsubscribe()
         }
     }, [])

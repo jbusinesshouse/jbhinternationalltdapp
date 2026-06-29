@@ -1,7 +1,8 @@
 import TopBar from "@/components/home/TopBar";
 import SingleProduct from "@/components/SingleProduct";
+import { useUser } from "@/context/UserContext";
 import { supabase } from "@/lib/supabase";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   FlatList,
   RefreshControl,
@@ -23,17 +24,14 @@ type RenderProps = {
 };
 
 export default function Index() {
+  const { user, loading: authLoading } = useUser();
   const [products, setProducts] = useState<ProductProps[]>([]);
   const [refreshing, setRefreshing] = useState(false);
 
-  const fetchProducts = async () => {
+  const fetchProducts = useCallback(async () => {
     try {
-      // 1. Get the current logged-in user
-      const { data: { user } } = await supabase.auth.getUser();
-
       let blockedUserIds: string[] = [];
 
-      // 2. Fetch the list of blocked user IDs if the user is logged in
       if (user) {
         const { data: blockData, error: blockError } = await supabase
           .from('blocks')
@@ -41,7 +39,6 @@ export default function Index() {
           .eq('blocker_id', user.id);
 
         if (!blockError && blockData) {
-          // Extract IDs into a simple string array
           blockedUserIds = blockData.map((b: any) => b.blocked_id);
         }
       }
@@ -96,11 +93,12 @@ export default function Index() {
         console.log("Error fetching products:", error);
       }
     }
-  };
+  }, [user]);
 
   useEffect(() => {
+    if (authLoading) return;
     fetchProducts();
-  }, []);
+  }, [authLoading, fetchProducts]);
 
   // ✅ Pull-to-refresh handler
   const onRefresh = async () => {
