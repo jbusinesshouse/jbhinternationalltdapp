@@ -1,5 +1,5 @@
 import { UserContext } from '@/context/UserContext'
-import { useRouter, useSegments } from 'expo-router'
+import { useRootNavigationState, useRouter, useSegments } from 'expo-router'
 import { useContext, useEffect } from 'react'
 
 export const useAuth = () => {
@@ -16,9 +16,11 @@ export const useProtectedRoute = () => {
     const { isAuthenticated, loading, isSettingUp } = useAuth()
     const segments = useSegments()
     const router = useRouter()
+    const rootNavigationState = useRootNavigationState()
+    const navigationReady = rootNavigationState?.key != null
 
     useEffect(() => {
-        // 🛑 If we are loading initial state OR busy setting up a new user, STOP.
+        if (!navigationReady) return
         if (loading || isSettingUp) return
 
         const inAuthGroup = segments[0] === '(auth)'
@@ -28,7 +30,7 @@ export const useProtectedRoute = () => {
         } else if (isAuthenticated && inAuthGroup) {
             router.replace('/(tabs)')
         }
-    }, [isAuthenticated, loading, isSettingUp, segments])
+    }, [navigationReady, isAuthenticated, loading, isSettingUp, segments, router])
 
     return { isAuthenticated, loading }
 }

@@ -27,7 +27,7 @@ const AccountStatusBanner = ({ status }: { status: string }) => {
 };
 
 function RootLayoutNav() {
-  const { profile } = useUser();
+  const { profile, loading } = useUser();
   useProtectedRoute();
 
   useAppUpdate();
@@ -36,13 +36,15 @@ function RootLayoutNav() {
     SplashScreen.hideAsync().catch(() => {});
   }, []);
 
-  // Cold starts can fire onLayout before the native splash module is ready — retry dismiss
   useEffect(() => {
-    const retries = [100, 500, 1500, 3000].map((ms) =>
-      setTimeout(() => SplashScreen.hideAsync().catch(() => {}), ms)
-    );
-    return () => retries.forEach(clearTimeout);
+    const fallback = setTimeout(() => SplashScreen.hideAsync().catch(() => {}), 500);
+    return () => clearTimeout(fallback);
   }, []);
+
+  // Don't mount navigation until auth is ready — prevents first-launch router crashes
+  if (loading) {
+    return <View style={styles.boot} onLayout={onLayoutRootView} />;
+  }
 
   return (
     <View style={{ flex: 1 }} onLayout={onLayoutRootView}>
@@ -79,6 +81,10 @@ export default function RootLayout() {
 }
 
 const styles = StyleSheet.create({
+  boot: {
+    flex: 1,
+    backgroundColor: '#ffffff',
+  },
   banner: {
     // Note: If you don't use a SafeAreaView, you need padding for the status bar
     paddingTop: 50,

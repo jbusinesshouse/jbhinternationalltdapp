@@ -33,19 +33,25 @@ export const UserProvider = ({ children }: { children: React.ReactNode }) => {
     const [loading, setLoading] = useState(true)
     const [isSettingUp, setIsSettingUp] = useState(false)
 
-    // Fetch profile data
     const fetchProfile = async (userId: string) => {
-        const { data, error } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('id', userId)
-            .single()
+        try {
+            const { data, error } = await supabase
+                .from('profiles')
+                .select('*')
+                .eq('id', userId)
+                .single()
 
-        if (!error) {
-            setProfile(data)
-        } else {
+            if (!error) {
+                setProfile(data)
+            } else {
+                if (__DEV__) {
+                    console.warn('Profile not found or error:', error.message)
+                }
+                setProfile(null)
+            }
+        } catch (err) {
             if (__DEV__) {
-                console.warn('Profile not found or error:', error.message)
+                console.warn('fetchProfile failed:', err)
             }
             setProfile(null)
         }
@@ -61,20 +67,18 @@ export const UserProvider = ({ children }: { children: React.ReactNode }) => {
             setLoading(false)
         }
 
-        const timeout = setTimeout(markReady, AUTH_INIT_TIMEOUT_MS)
+        const safetyTimeout = setTimeout(markReady, AUTH_INIT_TIMEOUT_MS)
 
-        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+        // Sync callback only — never await Supabase inside (deadlocks auth on cold start)
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
             if (!mounted) return
 
             setSession(session)
             setUser(session?.user ?? null)
-
-            if (event === 'INITIAL_SESSION') {
-                markReady()
-            }
+            markReady()
 
             if (session?.user) {
-                await fetchProfile(session.user.id)
+                void fetchProfile(session.user.id)
             } else {
                 setProfile(null)
             }
@@ -82,7 +86,7 @@ export const UserProvider = ({ children }: { children: React.ReactNode }) => {
 
         return () => {
             mounted = false
-            clearTimeout(timeout)
+            clearTimeout(safetyTimeout)
             subscription.unsubscribe()
         }
     }, [])
