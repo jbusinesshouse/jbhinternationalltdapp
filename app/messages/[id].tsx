@@ -1,106 +1,228 @@
-import { useNavigation } from 'expo-router'
-import React, { useState } from 'react'
-import { FlatList, Image, Pressable, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native'
+import { useChatInbox } from '@/context/ChatInboxContext';
+import { useUser } from '@/context/UserContext';
+import {
+    ChatMessage,
+    ChatProductPayload,
+    fetchChatMessages,
+    fetchChatRoom,
+    parseChatMessageContent,
+    sendChatMessage,
+} from '@/lib/chat';
+import { router, useLocalSearchParams, useNavigation } from 'expo-router';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import {
+    ActivityIndicator,
+    Alert,
+    FlatList,
+    Image,
+    Keyboard,
+    Pressable,
+    StyleSheet,
+    Text,
+    TextInput,
+    View,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-const MESSAGEDATA = [
-    {
-        id: 1,
-        from: "other",
-        text: "The phone you asked about is a copy. Do you need a copy or the original?"
-    },
-    {
-        id: 2,
-        from: "self",
-        text: "Can you tell me exactly how much both copy and the original will cost? I also need to know about the shipping cost in my country"
-    },
-    {
-        id: 3,
-        from: "other",
-        text: "The phone you asked about is a copy. Do you need a copy or the original?"
-    },
-    {
-        id: 4,
-        from: "self",
-        text: "Can you tell me exactly how much both copy and the original will cost? I also need to know about the shipping cost in my country"
-    },
-    {
-        id: 5,
-        from: "other",
-        text: "The phone you asked about is a copy. Do you need a copy or the original?"
-    },
-    {
-        id: 6,
-        from: "self",
-        text: "Can you tell me exactly how much both copy and the original will cost? I also need to know about the shipping cost in my country"
-    },
-    {
-        id: 7,
-        from: "self",
-        text: "Can you tell me exactly how much both copy and the original will cost? I also need to know about the shipping cost in my country"
-    },
-    {
-        id: 8,
-        from: "other",
-        text: "The phone you asked about is a copy. Do you need a copy or the original?"
-    },
-    {
-        id: 9,
-        from: "self",
-        text: "Can you tell me exactly how much both copy and the original will cost? I also need to know about the shipping cost in my country"
-    },
-    {
-        id: 10,
-        from: "self",
-        text: "Can you tell me exactly how much both copy and the original will cost? I also need to know about the shipping cost in my country"
-    },
-    {
-        id: 11,
-        from: "self",
-        text: "Can you tell me exactly how much both copy and the original will cost? I also need to know about the shipping cost in my country"
-    },
-]
-
-type MessageProps = {
-    id: number
-    from: string;
-    text: string;
-}
 type RenderProps = {
-    item: MessageProps;
-}
+    item: ChatMessage;
+};
+
+type ProductCardProps = {
+    product: ChatProductPayload;
+    isSelf: boolean;
+    onPress: () => void;
+};
+
+const ProductCardBubble = ({ product, isSelf, onPress }: ProductCardProps) => (
+    <Pressable
+        onPress={onPress}
+        style={[styles.productCard, isSelf ? styles.productCardSelf : styles.productCardOther]}
+    >
+        <Image
+            source={
+                product.imageUrl
+                    ? { uri: product.imageUrl }
+                    : require('@/assets/images/product1.png')
+            }
+            style={styles.productCardImage}
+        />
+        <View style={styles.productCardInfo}>
+            <Text numberOfLines={2} style={styles.productCardName}>
+                {product.name}
+            </Text>
+            <Text style={styles.productCardPrice}>BDT {product.price}</Text>
+            <Text style={styles.productCardMoq}>Min. order {product.moq} pieces</Text>
+            <Text style={styles.productCardIntro}>{product.introText}</Text>
+            <Text style={styles.productCardLink}>View product</Text>
+        </View>
+    </Pressable>
+);
 
 const SingleMessage = () => {
-    const navigation = useNavigation()
-    const { width, height } = useWindowDimensions()
-    const [messageVal, setMessageVal] = useState<string>('')
+    const navigation = useNavigation();
+    const { user } = useUser();
+    const { messagesByRoom, setMessages, appendMessage, upsertRoomPreview } = useChatInbox();
+    const insets = useSafeAreaInsets();
+    const listRef = useRef<FlatList<ChatMessage>>(null);
+    const messagesByRoomRef = useRef(messagesByRoom);
+    messagesByRoomRef.current = messagesByRoom;
+
+    const {
+        id: roomId,
+        otherPartyName,
+        otherPartyAvatar,
+        productName,
+    } = useLocalSearchParams<{
+        id: string;
+        otherPartyName?: string;
+        otherPartyAvatar?: string;
+        productName?: string;
+        productId?: string;
+        otherPartyId?: string;
+    }>();
+
+    const messages = roomId ? (messagesByRoom[roomId] ?? []) : [];
+    const [messageVal, setMessageVal] = useState('');
+    const [hydrating, setHydrating] = useState(false);
+    const [sending, setSending] = useState(false);
+    const [roomProductName, setRoomProductName] = useState(productName ?? '');
+
+    const headerTitle = otherPartyName || 'Chat';
+    const avatarUri = otherPartyAvatar || undefined;
+    const inputBottomPadding = Math.max(insets.bottom, 15);
+
+    const scrollToEnd = useCallback((animated = true) => {
+        requestAnimationFrame(() => {
+            listRef.current?.scrollToEnd({ animated });
+        });
+    }, []);
+
+    useEffect(() => {
+        if (!roomId) return;
+
+        let cancelled = false;
+        const hasCachedMessages = (messagesByRoomRef.current[roomId]?.length ?? 0) > 0;
+        setHydrating(!hasCachedMessages);
+
+        void (async () => {
+            const [messagesResult, roomResult] = await Promise.all([
+                fetchChatMessages(roomId),
+                fetchChatRoom(roomId),
+            ]);
+
+            if (cancelled) return;
+
+            if (!messagesResult.error) {
+                setMessages(roomId, messagesResult.data);
+            } else {
+                Alert.alert('Error', messagesResult.error);
+            }
+
+            if (roomResult.data?.product?.name) {
+                setRoomProductName(roomResult.data.product.name);
+            }
+
+            setHydrating(false);
+        })();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [roomId, setMessages]);
+
+    useEffect(() => {
+        if (messages.length === 0) return;
+        scrollToEnd();
+    }, [messages.length, scrollToEnd]);
 
     const handleBackPress = () => {
-        navigation.goBack()
-    }
-    const calculatedWidth = width
-    const calculatedHeight = height - 130
+        navigation.goBack();
+    };
 
-    const renderItem = ({ item }: RenderProps) => (
+    const handleSend = async () => {
+        if (!roomId || !user || sending) return;
 
-        item.from === 'other' ?
-            <View style={styles.otherMessage}>
-                <Image
-                    source={require('@/assets/images/store1.jpg')}
-                    style={styles.otherMessageImg}
-                />
-                <View style={styles.otherMessageTextWrapper}>
-                    <Text>{item.text}</Text>
+        const trimmed = messageVal.trim();
+        if (!trimmed) return;
+
+        setSending(true);
+        setMessageVal('');
+        Keyboard.dismiss();
+
+        const { data, error } = await sendChatMessage(roomId, user.id, trimmed);
+        setSending(false);
+
+        if (error) {
+            setMessageVal(trimmed);
+            Alert.alert('Send failed', error);
+            return;
+        }
+
+        if (data) {
+            appendMessage(roomId, data);
+        } else {
+            upsertRoomPreview(roomId, trimmed);
+        }
+    };
+
+    const openProduct = (productId: string) => {
+        router.push({
+            pathname: '/product/[id]',
+            params: { id: productId },
+        });
+    };
+
+    const renderItem = ({ item }: RenderProps) => {
+        const isSelf = item.sender_id === user?.id;
+        const parsed = parseChatMessageContent(item.message_text);
+
+        if (parsed.kind === 'product') {
+            return (
+                <View style={[styles.messageRow, isSelf ? styles.messageRowSelf : styles.messageRowOther]}>
+                    {!isSelf ? (
+                        <Image
+                            source={
+                                avatarUri
+                                    ? { uri: avatarUri }
+                                    : require('@/assets/images/store1.jpg')
+                            }
+                            style={styles.otherMessageImg}
+                        />
+                    ) : null}
+                    <ProductCardBubble
+                        product={parsed.product}
+                        isSelf={isSelf}
+                        onPress={() => openProduct(parsed.product.productId)}
+                    />
                 </View>
-            </View>
-            :
-            <View style={styles.selfMessage}>
-                <Text>{item.text}</Text>
-            </View>
-    )
+            );
+        }
 
-    const handleInp = (text: string) => {
-        setMessageVal(text)
-    }
+        if (!isSelf) {
+            return (
+                <View style={styles.otherMessage}>
+                    <Image
+                        source={
+                            avatarUri
+                                ? { uri: avatarUri }
+                                : require('@/assets/images/store1.jpg')
+                        }
+                        style={styles.otherMessageImg}
+                    />
+                    <View style={styles.otherMessageTextWrapper}>
+                        <Text style={styles.messageText}>{parsed.text}</Text>
+                    </View>
+                </View>
+            );
+        }
+
+        return (
+            <View style={styles.selfMessage}>
+                <Text style={styles.selfMessageText}>{parsed.text}</Text>
+            </View>
+        );
+    };
 
     return (
         <View style={styles.container}>
@@ -113,45 +235,81 @@ const SingleMessage = () => {
                 </Pressable>
                 <View style={styles.messageHeadInfo}>
                     <Image
-                        source={require('@/assets/images/store1.jpg')}
+                        source={
+                            avatarUri
+                                ? { uri: avatarUri }
+                                : require('@/assets/images/store1.jpg')
+                        }
                         style={styles.messageHeadImg}
                     />
-                    <Text numberOfLines={1} ellipsizeMode="tail" style={styles.messageHeadPerson}>Shenzhen Hechen Technology Ltd. asdfdsf</Text>
+                    <View style={styles.messageHeadTextBlock}>
+                        <Text numberOfLines={1} ellipsizeMode="tail" style={styles.messageHeadPerson}>
+                            {headerTitle}
+                        </Text>
+                        {roomProductName ? (
+                            <Text numberOfLines={1} style={styles.messageHeadProduct}>
+                                {roomProductName}
+                            </Text>
+                        ) : null}
+                    </View>
                 </View>
             </View>
-            <View style={{ ...styles.messageMain, height: calculatedHeight }}>
-                <FlatList
-                    data={MESSAGEDATA}
-                    renderItem={renderItem}
-                    keyExtractor={item => item.id.toString()}
-                    showsVerticalScrollIndicator={false}
-                />
+
+            <View style={styles.messageMain}>
+                {hydrating && messages.length === 0 ? (
+                    <View style={styles.loadingWrapper}>
+                        <ActivityIndicator size="large" color="#f5832b" />
+                    </View>
+                ) : (
+                    <FlatList
+                        ref={listRef}
+                        data={messages}
+                        renderItem={renderItem}
+                        keyExtractor={(item) => item.id}
+                        showsVerticalScrollIndicator={false}
+                        contentContainerStyle={styles.messageListContent}
+                        keyboardShouldPersistTaps="handled"
+                        keyboardDismissMode="interactive"
+                        onContentSizeChange={() => scrollToEnd(false)}
+                    />
+                )}
             </View>
-            <View style={styles.messageSendWrapper}>
+
+            <View style={[styles.messageSendWrapper, { paddingBottom: inputBottomPadding }]}>
                 <TextInput
                     style={styles.messageInp}
-                    placeholder='message For Products'
+                    placeholder="Message about this product"
                     placeholderTextColor="#9CA3AF"
                     value={messageVal}
-                    onChangeText={(text) => handleInp(text)}
+                    onChangeText={setMessageVal}
+                    editable={!sending}
+                    multiline
                 />
-                <Pressable style={styles.sendBtn}>
-                    <Image
-                        source={require('@/assets/images/icons/send.png')}
-                        style={styles.sendIcon}
-                    />
+                <Pressable
+                    style={[styles.sendBtn, sending && { opacity: 0.7 }]}
+                    onPress={handleSend}
+                    disabled={sending || !messageVal.trim()}
+                >
+                    {sending ? (
+                        <ActivityIndicator size="small" color="#ffffff" />
+                    ) : (
+                        <Image
+                            source={require('@/assets/images/icons/send.png')}
+                            style={styles.sendIcon}
+                        />
+                    )}
                 </Pressable>
             </View>
         </View>
-    )
-}
+    );
+};
 
-export default SingleMessage
-
+export default SingleMessage;
 
 const styles = StyleSheet.create({
     container: {
         flex: 1,
+        backgroundColor: '#f5f5f5',
     },
     messageHead: {
         display: 'flex',
@@ -183,22 +341,50 @@ const styles = StyleSheet.create({
         borderRadius: 30,
         objectFit: 'cover',
     },
-    messageHeadPerson: {
-        width: '100%',
-        fontSize: 15,
-        fontWeight: 500,
+    messageHeadTextBlock: {
         flex: 1,
     },
+    messageHeadPerson: {
+        fontSize: 15,
+        fontWeight: '500',
+    },
+    messageHeadProduct: {
+        fontSize: 12,
+        color: '#9b9b9b',
+        marginTop: 2,
+    },
     messageMain: {
-        // paddingVertical: 20,
+        flex: 1,
         paddingBottom: 10,
         paddingHorizontal: 15,
-        overflow: 'hidden',
+    },
+    messageListContent: {
+        paddingVertical: 12,
+        flexGrow: 1,
+        justifyContent: 'flex-end',
+    },
+    loadingWrapper: {
+        flex: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    messageRow: {
+        flexDirection: 'row',
+        gap: 10,
+        marginVertical: 8,
+        maxWidth: '92%',
+    },
+    messageRowSelf: {
+        alignSelf: 'flex-end',
+    },
+    messageRowOther: {
+        alignSelf: 'flex-start',
     },
     otherMessage: {
         flexDirection: 'row',
         gap: 10,
         marginVertical: 8,
+        maxWidth: '85%',
     },
     otherMessageImg: {
         width: 35,
@@ -214,8 +400,11 @@ const styles = StyleSheet.create({
         borderTopLeftRadius: 0,
         backgroundColor: '#ffffff',
     },
+    messageText: {
+        color: '#111827',
+    },
     selfMessage: {
-        width: '85%',
+        maxWidth: '85%',
         backgroundColor: '#ffd49dff',
         paddingVertical: 10,
         paddingHorizontal: 12,
@@ -224,23 +413,78 @@ const styles = StyleSheet.create({
         marginVertical: 8,
         alignSelf: 'flex-end',
     },
-    messageSendWrapper: {
-        position: 'absolute',
-        bottom: 0,
-        left: 0,
-        right: 0,
+    selfMessageText: {
+        color: '#111827',
+    },
+    productCard: {
+        flex: 1,
+        flexDirection: 'row',
+        borderRadius: 10,
+        overflow: 'hidden',
+        borderWidth: 1,
+        borderColor: '#e5e5e5',
         backgroundColor: '#ffffff',
-        paddingVertical: 15,
+    },
+    productCardSelf: {
+        backgroundColor: '#fff8ef',
+        borderColor: '#f5d9b8',
+    },
+    productCardOther: {
+        backgroundColor: '#ffffff',
+    },
+    productCardImage: {
+        width: 88,
+        height: 110,
+        objectFit: 'cover',
+    },
+    productCardInfo: {
+        flex: 1,
+        padding: 10,
+        gap: 2,
+    },
+    productCardName: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#111827',
+    },
+    productCardPrice: {
+        fontSize: 14,
+        fontWeight: '700',
+        color: '#f5832b',
+        marginTop: 2,
+    },
+    productCardMoq: {
+        fontSize: 12,
+        color: '#6b7280',
+    },
+    productCardIntro: {
+        fontSize: 12,
+        color: '#374151',
+        marginTop: 6,
+    },
+    productCardLink: {
+        fontSize: 12,
+        color: '#f5832b',
+        fontWeight: '600',
+        marginTop: 4,
+    },
+    messageSendWrapper: {
+        backgroundColor: '#ffffff',
+        paddingTop: 15,
         paddingHorizontal: 15,
         flexDirection: 'row',
-        alignItems: 'center'
+        alignItems: 'flex-end',
+        borderTopWidth: 1,
+        borderTopColor: '#e5e5e5',
     },
     messageInp: {
         flex: 1,
-        height: 50,
+        minHeight: 50,
+        maxHeight: 120,
         borderWidth: 1,
         borderColor: '#ddddddff',
-        paddingHorizontal: 10,
+        paddingHorizontal: 15,
+        paddingVertical: 12,
         borderRadius: 30,
         marginRight: 15,
         color: '#000000',
@@ -259,4 +503,4 @@ const styles = StyleSheet.create({
         height: 25,
         filter: 'invert(1)',
     },
-})
+});

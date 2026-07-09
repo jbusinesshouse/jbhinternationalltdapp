@@ -1,3 +1,4 @@
+import { ChatInboxProvider } from '@/context/ChatInboxContext'
 import { UserProvider, useUser } from '@/context/UserContext'
 import useAppUpdate from '@/hooks/useAppUpdate'
 import { useProtectedRoute } from "@/hooks/useAuth"
@@ -69,13 +70,15 @@ export default function RootLayout() {
 
   return (
     <UserProvider>
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={behaviour}
-        keyboardVerticalOffset={0}
-      >
-        <RootLayoutNav />
-      </KeyboardAvoidingView>
+      <ChatInboxProvider>
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={behaviour}
+          keyboardVerticalOffset={0}
+        >
+          <RootLayoutNav />
+        </KeyboardAvoidingView>
+      </ChatInboxProvider>
     </UserProvider>
   )
 }

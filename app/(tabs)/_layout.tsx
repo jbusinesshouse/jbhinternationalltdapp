@@ -26,7 +26,6 @@ const TabLayout = () => {
             <Tabs.Screen
                 name="messages"
                 options={{
-                    href: null,
                     title: 'Messages',
                     tabBarIcon: ({ color }) => <IconSymbol size={28} name="message" color={color} />,
                 }}

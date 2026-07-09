@@ -1,11 +1,18 @@
 import HtmlRender from "@/components/htmlRender/HtmlRenter";
 import { useUser } from "@/context/UserContext";
+import { findOrCreateChatRoom } from "@/lib/chat";
 import { supabase } from "@/lib/supabase";
 import { styles } from "@/styles/product";
+import Feather from "@expo/vector-icons/Feather";
 import { router, useLocalSearchParams, useNavigation } from "expo-router";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
+    ActivityIndicator,
+    Alert,
     Image,
+    Modal,
+    NativeScrollEvent,
+    NativeSyntheticEvent,
     Pressable,
     RefreshControl,
     ScrollView,
@@ -14,6 +21,7 @@ import {
     useWindowDimensions,
     View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 /* ================= TYPES ================= */
 
@@ -47,23 +55,50 @@ type Size = {
     variant_id: string;
 };
 
+type DotsIndicatorProps = {
+    count: number;
+    activeIndex: number;
+    containerStyle?: object;
+};
+
+const DotsIndicator = ({ count, activeIndex, containerStyle }: DotsIndicatorProps) => {
+    if (count <= 1) return null;
+
+    return (
+        <View style={[styles.dotsContainer, containerStyle]}>
+            {Array.from({ length: count }).map((_, i) => (
+                <View
+                    key={i}
+                    style={[styles.dot, activeIndex === i && styles.dotActive]}
+                />
+            ))}
+        </View>
+    );
+};
+
 /* ================= COMPONENT ================= */
 
 const ProductPreview = () => {
-    const { profile } = useUser();
+    const { profile, user } = useUser();
 
     const [storeType, setStoreType] = useState<string | null>(null);
     const [product, setProduct] = useState<Product | null>(null);
     const [variants, setVariants] = useState<Variant[]>([]);
     const [sizes, setSizes] = useState<Size[]>([]);
     const [refreshing, setRefreshing] = useState(false);
+    const [textSellerLoading, setTextSellerLoading] = useState(false);
 
     const { id } = useLocalSearchParams<{ id: string }>();
-    const { width } = useWindowDimensions();
+    const { width, height } = useWindowDimensions();
     const navigation = useNavigation();
+    const insets = useSafeAreaInsets();
+    const galleryScrollRef = useRef<ScrollView>(null);
 
     const [activeColor, setActiveColor] = useState(0);
     const [searchVal, setSearchVal] = useState("");
+    const [activeImageIndex, setActiveImageIndex] = useState(0);
+    const [galleryVisible, setGalleryVisible] = useState(false);
+    const [galleryIndex, setGalleryIndex] = useState(0);
 
     const [selectedQty, setSelectedQty] = useState<
         Record<string, Record<string, number>>
@@ -174,6 +209,17 @@ const ProductPreview = () => {
         setRefreshing(false);
     };
 
+    useEffect(() => {
+        if (!galleryVisible) return;
+
+        requestAnimationFrame(() => {
+            galleryScrollRef.current?.scrollTo({
+                x: galleryIndex * width,
+                animated: false,
+            });
+        });
+    }, [galleryVisible, galleryIndex, width]);
+
     const currentVariant = variants[activeColor];
 
     const getSizesForVariant = (variantId: string) => {
@@ -267,13 +313,29 @@ const ProductPreview = () => {
         );
     }
 
-    const mainImage = product.product_images?.find((i) => i.is_main);
     const images = product.product_images
         ? [
-            ...product.product_images.filter(i => i.is_main),   // main first
-            ...product.product_images.filter(i => !i.is_main),  // others after
+            ...product.product_images.filter(i => i.is_main),
+            ...product.product_images.filter(i => !i.is_main),
         ]
         : [];
+
+    const displayImages = images.length > 0
+        ? images.map((img) => img.image_url)
+        : [null];
+
+    const handleImageScroll = (
+        e: NativeSyntheticEvent<NativeScrollEvent>,
+        setter: (index: number) => void
+    ) => {
+        const index = Math.round(e.nativeEvent.contentOffset.x / width);
+        setter(index);
+    };
+
+    const openGallery = (index: number) => {
+        setGalleryIndex(index);
+        setGalleryVisible(true);
+    };
 
     const handleSearch = () => {
         if (!searchVal?.trim()) return
@@ -284,7 +346,57 @@ const ProductPreview = () => {
         })
     }
 
+    const handleTextSeller = async () => {
+        if (!product || !user) {
+            Alert.alert('Sign in required', 'Please sign in to message the seller.');
+            return;
+        }
+
+        if (user.id === product.seller_id) {
+            Alert.alert('Unavailable', 'You cannot message yourself about your own product.');
+            return;
+        }
+
+        setTextSellerLoading(true);
+
+        const mainImage = product.product_images?.find((img) => img.is_main)?.image_url
+            ?? product.product_images?.[0]?.image_url
+            ?? null;
+
+        const result = await findOrCreateChatRoom(
+            user.id,
+            product.seller_id,
+            {
+                productId: String(product.id),
+                name: product.name,
+                price: String(product.price),
+                moq: product.moq,
+                imageUrl: mainImage,
+            },
+        );
+
+        setTextSellerLoading(false);
+
+        if ('error' in result) {
+            Alert.alert('Could not start chat', result.error);
+            return;
+        }
+
+        router.push({
+            pathname: '/messages/[id]',
+            params: {
+                id: result.roomId,
+                productName: product.name,
+                productId: String(product.id),
+                otherPartyName: product.seller?.store_name ?? 'Seller',
+                otherPartyAvatar: product.seller?.avatar_url ?? '',
+                otherPartyId: product.seller_id,
+            },
+        });
+    };
+
     const calculatedWidth = width - 80;
+    const isOwnProduct = user?.id === product?.seller_id;
 
     return (
         <View style={{ flex: 1 }}>
@@ -324,41 +436,36 @@ const ProductPreview = () => {
             >
 
                 {/* IMAGE */}
-                {/* <View style={styles.imageWrapper}>
-                    <Image
-                        source={
-                            mainImage?.image_url
-                                ? { uri: mainImage.image_url }
-                                : require("@/assets/images/product1.png")
-                        }
-                        style={styles.productImg}
-                    />
-                </View> */}
                 <View style={styles.imageWrapper}>
                     <ScrollView
                         horizontal
                         pagingEnabled
                         showsHorizontalScrollIndicator={false}
+                        onMomentumScrollEnd={(e) => handleImageScroll(e, setActiveImageIndex)}
                     >
-                        {images.length > 0 ? (
-                            images.map((img, index) => (
+                        {displayImages.map((imageUrl, index) => (
+                            <Pressable
+                                key={index}
+                                onPress={() => openGallery(index)}
+                                style={{ width }}
+                            >
                                 <Image
-                                    key={index}
-                                    source={{ uri: img.image_url }}
-                                    style={[
-                                        styles.productImg,
-                                        { width: width } // full screen swipe
-                                    ]}
+                                    source={
+                                        imageUrl
+                                            ? { uri: imageUrl }
+                                            : require("@/assets/images/product1.png")
+                                    }
+                                    style={[styles.productImg, { width }]}
                                     resizeMode="cover"
                                 />
-                            ))
-                        ) : (
-                            <Image
-                                source={require("@/assets/images/product1.png")}
-                                style={[styles.productImg, { width: width }]}
-                            />
-                        )}
+                            </Pressable>
+                        ))}
                     </ScrollView>
+
+                    <DotsIndicator
+                        count={displayImages.length}
+                        activeIndex={activeImageIndex}
+                    />
                 </View>
 
                 {/* PRICE */}
@@ -532,9 +639,27 @@ const ProductPreview = () => {
 
             {/* ACTION */}
             <View style={styles.productAct}>
+                {!isOwnProduct && (
+                    <Pressable
+                        style={[
+                            styles.productActTextSeller,
+                            textSellerLoading && { opacity: 0.7 },
+                        ]}
+                        disabled={textSellerLoading}
+                        onPress={handleTextSeller}
+                    >
+                        {textSellerLoading ? (
+                            <ActivityIndicator size="small" color="#f5832b" />
+                        ) : (
+                            <Text style={styles.productActTextSellerText}>Text Seller</Text>
+                        )}
+                    </Pressable>
+                )}
+
                 <Pressable
                     style={[
                         styles.productActOrder,
+                        isOwnProduct && { width: '100%' },
                         // Disable styling if wholesale OR if account is not active
                         (storeType === "wholesale" || (profile?.status && profile.status !== 'active')) &&
                         { backgroundColor: "#ccc" }
@@ -595,6 +720,61 @@ const ProductPreview = () => {
                     </Text>
                 </Pressable>
             </View>
+
+            <Modal
+                visible={galleryVisible}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setGalleryVisible(false)}
+            >
+                <View style={styles.galleryOverlay}>
+                    <Pressable
+                        style={[
+                            styles.galleryCloseBtn,
+                            { top: insets.top + 12 },
+                        ]}
+                        onPress={() => setGalleryVisible(false)}
+                    >
+                        <Feather name="x" size={24} color="#ffffff" />
+                    </Pressable>
+
+                    <ScrollView
+                        ref={galleryScrollRef}
+                        horizontal
+                        pagingEnabled
+                        showsHorizontalScrollIndicator={false}
+                        onMomentumScrollEnd={(e) => handleImageScroll(e, setGalleryIndex)}
+                    >
+                        {displayImages.map((imageUrl, index) => (
+                            <View
+                                key={index}
+                                style={{
+                                    width,
+                                    height,
+                                    justifyContent: "center",
+                                    alignItems: "center",
+                                }}
+                            >
+                                <Image
+                                    source={
+                                        imageUrl
+                                            ? { uri: imageUrl }
+                                            : require("@/assets/images/product1.png")
+                                    }
+                                    style={styles.galleryImage}
+                                    resizeMode="contain"
+                                />
+                            </View>
+                        ))}
+                    </ScrollView>
+
+                    <DotsIndicator
+                        count={displayImages.length}
+                        activeIndex={galleryIndex}
+                        containerStyle={styles.galleryDotsContainer}
+                    />
+                </View>
+            </Modal>
 
         </View >
     );
