@@ -109,6 +109,7 @@ const Signup = () => {
     const [selectedUpazila, setSelectedUpazila] = useState('')
     const [image, setImage] = useState<string | null>(null)
     const [isChecked, setChecked] = useState(false);
+    const [referralCode, setReferralCode] = useState('')
 
     const { setIsSettingUp } = useAuth();
 
@@ -177,6 +178,28 @@ const Signup = () => {
         try {
             setLoading(true)
             setIsSettingUp(true);
+
+            // ---- REFERRAL CODE (optional) ----
+            // If a code is provided, validate it via RPC before creating the account.
+            let referralCreatorId: string | null = null
+            const trimmedReferralCode = referralCode.trim()
+            if (trimmedReferralCode) {
+                const { data: referralData, error: referralError } = await supabase
+                    .rpc('get_referral_creator', { referral_code: trimmedReferralCode })
+
+                // Network / RPC failure → fall through to normal signup error handling
+                if (referralError) throw referralError
+
+                // NULL → invalid code, block signup
+                if (!referralData) {
+                    setIsSettingUp(false)
+                    setLoading(false)
+                    Alert.alert('Error', 'Invalid referral code.')
+                    return
+                }
+
+                referralCreatorId = referralData as string
+            }
 
             // Sign up the user
             const { data, error } = await supabase.auth.signUp({
@@ -260,6 +283,7 @@ const Signup = () => {
                     district: district,
                     upazila: selectedUpazila,
                     avatar_url: avatarUrl,
+                    referral_creator_id: referralCreatorId,
                 })
                 .select()
 
@@ -377,6 +401,15 @@ const Signup = () => {
                     secureTextEntry
                     value={confirmPassword}
                     onChangeText={setConfirmPassword}
+                />
+
+                <TextInput
+                    style={styles.input}
+                    placeholder="Referral Code (optional)"
+                    placeholderTextColor="#9CA3AF"
+                    autoCapitalize="none"
+                    value={referralCode}
+                    onChangeText={setReferralCode}
                 />
 
                 <View style={{ flexDirection: 'row' }}>
