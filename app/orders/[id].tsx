@@ -131,6 +131,7 @@ const OrderDetails = () => {
             case 'completed': return '#16a34a'
             case 'pending': return '#f59e0b'
             case 'cancelled': return '#ef4444'
+            case 'hold': return '#ea580c'
             default: return '#6b7280'
         }
     }

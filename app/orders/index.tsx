@@ -104,6 +104,8 @@ const OrderCard = ({ order, onPress }: any) => {
                 return 'orange'
             case 'cancelled':
                 return 'red'
+            case 'hold':
+                return '#ea580c'
             default:
                 return 'gray'
         }

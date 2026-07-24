@@ -4,6 +4,7 @@ import { useNavigation, useRouter } from 'expo-router'
 import React, { useEffect, useState } from 'react'
 import {
     ActivityIndicator,
+    Alert,
     Image,
     Pressable,
     ScrollView,
@@ -18,6 +19,8 @@ type Notification = {
     is_read: boolean
     created_at: string
     order_id?: string | null
+    type?: string | null
+    action_completed?: boolean | null
 }
 
 const Notifications = () => {
@@ -27,6 +30,7 @@ const Notifications = () => {
     const [storeType, setStoreType] = useState<string | null>(null)
     const [notifications, setNotifications] = useState<Notification[]>([])
     const [loading, setLoading] = useState(true)
+    const [actingId, setActingId] = useState<string | null>(null)
 
     /* ================= FETCH ================= */
 
@@ -97,9 +101,66 @@ const Notifications = () => {
         }
     }
 
+    /* ================= CANCEL REQUEST ACTIONS ================= */
+
+    const handleCancelAction = async (
+        item: Notification,
+        decision: 'accept' | 'reject'
+    ) => {
+        if (!item.order_id || item.action_completed) return
+
+        try {
+            setActingId(item.id)
+
+            const newStatus = decision === 'accept' ? 'cancelled' : 'hold'
+
+            const { error: orderError } = await supabase
+                .from('orders')
+                .update({ status: newStatus })
+                .eq('id', item.order_id)
+
+            if (orderError) throw orderError
+
+            const { error: notifError } = await supabase
+                .from('notifications')
+                .update({
+                    action_completed: true,
+                    is_read: true,
+                })
+                .eq('id', item.id)
+
+            if (notifError) throw notifError
+
+            setNotifications(prev =>
+                prev.map(n =>
+                    n.id === item.id
+                        ? { ...n, action_completed: true, is_read: true }
+                        : n
+                )
+            )
+        } catch (err) {
+            if (__DEV__) {
+                console.log('Cancel action error:', err)
+            }
+            Alert.alert('Error', 'Failed to update cancellation request.')
+        } finally {
+            setActingId(null)
+        }
+    }
+
     /* ================= HANDLE CLICK ================= */
 
     const handlePress = async (item: Notification) => {
+        if (
+            item.type === 'order_cancel_request' &&
+            !item.action_completed
+        ) {
+            if (!item.is_read) {
+                await markAsRead(item.id)
+            }
+            return
+        }
+
         if (!item.is_read) {
             await markAsRead(item.id)
         }
@@ -174,6 +235,44 @@ const Notifications = () => {
                                 <Text style={time}>
                                     {new Date(item.created_at).toLocaleString()}
                                 </Text>
+
+                                {item.type === 'order_cancel_request' && (
+                                    item.action_completed ? (
+                                        <Text style={completedText}>
+                                            Completed
+                                        </Text>
+                                    ) : (
+                                        <View style={actionRow}>
+                                            <Pressable
+                                                style={[actionBtn, acceptBtn]}
+                                                disabled={actingId === item.id}
+                                                onPress={() =>
+                                                    handleCancelAction(item, 'accept')
+                                                }
+                                            >
+                                                <Text style={actionBtnText}>
+                                                    {actingId === item.id
+                                                        ? '...'
+                                                        : 'Accept cancellation'}
+                                                </Text>
+                                            </Pressable>
+
+                                            <Pressable
+                                                style={[actionBtn, rejectBtn]}
+                                                disabled={actingId === item.id}
+                                                onPress={() =>
+                                                    handleCancelAction(item, 'reject')
+                                                }
+                                            >
+                                                <Text style={actionBtnText}>
+                                                    {actingId === item.id
+                                                        ? '...'
+                                                        : 'Reject cancellation'}
+                                                </Text>
+                                            </Pressable>
+                                        </View>
+                                    )
+                                )}
                             </View>
 
                             {!item.is_read && (
@@ -244,6 +343,40 @@ const emptyBox = {
 const emptyText = {
     color: '#888',
     fontSize: 14
+} as const
+
+const actionRow = {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 10
+} as const
+
+const actionBtn = {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8
+} as const
+
+const acceptBtn = {
+    backgroundColor: '#16a34a'
+} as const
+
+const rejectBtn = {
+    backgroundColor: '#ef4444'
+} as const
+
+const actionBtnText = {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600'
+} as const
+
+const completedText = {
+    marginTop: 10,
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#16a34a'
 } as const
 
 export default Notifications

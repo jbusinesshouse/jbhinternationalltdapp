@@ -4,6 +4,7 @@ import { useLocalSearchParams, useNavigation } from 'expo-router'
 import React, { useEffect, useState } from 'react'
 import {
     ActivityIndicator,
+    Alert,
     Image,
     Modal,
     Pressable,
@@ -22,6 +23,7 @@ type Order = {
     email: string
     city: string
     delivery_address: string
+    user_id: string
     order_items?: any[]
 }
 
@@ -74,12 +76,74 @@ const SalesDetails = () => {
     }, [id])
 
     const askUpdateStatus = (status: string) => {
+        if (order?.status?.toLowerCase() === 'hold') return
         setPendingStatus(status)
         setModalVisible(true)
     }
 
+    const sendCancelRequest = async () => {
+        if (!order?.user_id) return
+
+        try {
+            setUpdating(true)
+
+            const { data: existing, error: existingError } = await supabase
+                .from('notifications')
+                .select('id')
+                .eq('order_id', order.id)
+                .eq('type', 'order_cancel_request')
+                .eq('action_completed', false)
+                .limit(1)
+
+            if (existingError) throw existingError
+
+            if (existing && existing.length > 0) {
+                Alert.alert(
+                    'Already Sent',
+                    'A cancellation request has already been sent for this order.'
+                )
+                return
+            }
+
+            const { error } = await supabase.from('notifications').insert([
+                {
+                    user_id: order.user_id,
+                    title: 'অর্ডার বাতিলের অনুরোধ',
+                    message:
+                        'আপনি কি সত্যিই অর্ডারটি ক্যানসেল করতে চান?\n\nআমাদের প্লাটফর্মের বাইরে লেনদেন করে কোনো প্রকার প্রতারিত হলে আমরা দায়ী থাকবো না।',
+                    type: 'order_cancel_request',
+                    action_completed: false,
+                    order_id: order.id,
+                    is_read: false,
+                },
+            ])
+
+            if (error) throw error
+
+            Alert.alert(
+                'Request Sent',
+                'Cancellation request has been sent to the buyer.'
+            )
+        } catch (err) {
+            if (__DEV__) {
+                console.log(err)
+            }
+            Alert.alert('Error', 'Failed to send cancellation request.')
+        } finally {
+            setUpdating(false)
+            setModalVisible(false)
+            setPendingStatus(null)
+        }
+    }
+
     const confirmUpdate = async (statusToApply: string) => {
         if (!order || !statusToApply) return
+        if (order.status?.toLowerCase() === 'hold') return
+
+        if (statusToApply === 'cancelled') {
+            await sendCancelRequest()
+            return
+        }
 
         const oldStatus = order.status
 
@@ -136,13 +200,16 @@ const SalesDetails = () => {
             0
         ) || 0
 
+    const isOnHold = order.status?.toLowerCase() === 'hold'
+
     const getStatusColor = () => {
-        switch (order.status) {
+        switch (order.status?.toLowerCase()) {
             case 'completed': return '#16a34a'
             case 'pending': return '#f59e0b'
             case 'processing': return '#3b82f6'
             case 'shipped': return '#8b5cf6'
             case 'cancelled': return '#ef4444'
+            case 'hold': return '#ea580c'
             default: return '#6b7280'
         }
     }
@@ -216,12 +283,18 @@ const SalesDetails = () => {
                         {order.status}
                     </Text>
 
-                    <View style={s.btnRow}>
-                        <StatusBtn label="Processing" onPress={() => askUpdateStatus('processing')} active={order.status === 'processing'} disabled={updating} />
-                        <StatusBtn label="Shipped" onPress={() => askUpdateStatus('shipped')} active={order.status === 'shipped'} disabled={updating} />
-                        <StatusBtn label="Completed" onPress={() => askUpdateStatus('completed')} active={order.status === 'completed'} disabled={updating} />
-                        <StatusBtn label="Cancelled" onPress={() => askUpdateStatus('cancelled')} active={order.status === 'cancelled'} danger disabled={updating} />
-                    </View>
+                    {isOnHold ? (
+                        <Text style={s.holdMessage}>
+                            This order is currently on hold and cannot be updated until the issue is resolved.
+                        </Text>
+                    ) : (
+                        <View style={s.btnRow}>
+                            <StatusBtn label="Processing" onPress={() => askUpdateStatus('processing')} active={order.status === 'processing'} disabled={updating} />
+                            <StatusBtn label="Shipped" onPress={() => askUpdateStatus('shipped')} active={order.status === 'shipped'} disabled={updating} />
+                            <StatusBtn label="Completed" onPress={() => askUpdateStatus('completed')} active={order.status === 'completed'} disabled={updating} />
+                            <StatusBtn label="Cancelled" onPress={() => askUpdateStatus('cancelled')} active={order.status === 'cancelled'} danger disabled={updating} />
+                        </View>
+                    )}
                 </Card>
 
                 {/* CUSTOMER */}
@@ -248,7 +321,9 @@ const SalesDetails = () => {
                         <Text style={s.titleText}>Confirm Status Update</Text>
 
                         <Text style={s.subText}>
-                            Change status to "{pendingStatus}"?
+                            {pendingStatus === 'cancelled'
+                                ? 'Send a cancellation request to the buyer?'
+                                : `Change status to "${pendingStatus}"?`}
                         </Text>
 
                         <View style={s.modalBtnRow}>
@@ -323,6 +398,13 @@ const s = StyleSheet.create({
     titleText: { fontSize: 16, fontWeight: '600' },
 
     subText: { fontSize: 13, opacity: 0.6 },
+
+    holdMessage: {
+        marginTop: 10,
+        fontSize: 13,
+        color: '#ea580c',
+        lineHeight: 18,
+    },
 
     badgeRow: { flexDirection: 'row', gap: 6, flexWrap: 'wrap' },
 
