@@ -110,7 +110,7 @@ export default function Index() {
   const flatHeaderSection = useMemo(
     () => (
       <View>
-        {isWholesale ? <WholesalePromoBanner href="/advertiseProduct" /> : null}
+        {isWholesale ? <WholesalePromoBanner href="/featuredRequest" /> : null}
 
         <HomeCategories
           selectedCategoryId={selectedCategoryId}

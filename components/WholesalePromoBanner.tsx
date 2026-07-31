@@ -7,7 +7,7 @@ import {
   View,
 } from "react-native";
 
-const BANNER = require("@/assets/images/promotion-banner.png");
+const BANNER = require("@/assets/images/promotion-banner-second.png");
 const ASPECT = 1024 / 572;
 /** Home `mainContainer` uses paddingHorizontal: 12 on each side. */
 const BANNER_WIDTH = Dimensions.get("window").width - 24;
@@ -18,7 +18,7 @@ type Props = {
 };
 
 export default function WholesalePromoBanner({
-  href = "/advertiseProduct",
+  href = "/featuredRequest",
 }: Props) {
   const router = useRouter();
 
