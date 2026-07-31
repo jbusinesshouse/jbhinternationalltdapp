@@ -123,7 +123,7 @@ function WholesaleHub({ profileId }: { profileId: string }) {
     return {
       style: styles.alertOk,
       title: "প্ল্যাটফর্ম ফি বকেয়া",
-      body: `সম্পূর্ণ বিক্রয়ের ১% ফি হিসেবে আপনার বকেয়া ${formatBdt(summary.outstanding)}।`,
+      body: `সম্পূর্ণ বিক্রয়ের ২% ফি হিসেবে আপনার বকেয়া ${formatBdt(summary.outstanding)}।`,
     };
   }, [summary, alertLevel]);
 

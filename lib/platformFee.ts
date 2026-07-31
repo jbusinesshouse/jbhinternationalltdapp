@@ -1,7 +1,7 @@
 import { supabase } from "@/lib/supabase";
 
-/** 1% of completed sales */
-export const PLATFORM_FEE_RATE = 0.01;
+/** 2% of completed sales */
+export const PLATFORM_FEE_RATE = 0.02;
 /** Max outstanding due shown / expected in one go */
 export const PLATFORM_FEE_MAX_DUE = 1500;
 /** Yellow warning threshold on outstanding */
@@ -31,7 +31,7 @@ export type PlatformFeePayment = {
 
 /**
  * Tracking model:
- * - feeFromSales  = completed_sales × 1%   (fee added from seller sales)
+ * - feeFromSales  = completed_sales × 2%   (fee added from seller sales)
  * - approvedPaid  = sum of approved proofs
  * - pendingPaid   = sum of pending proofs (not counted as paid yet)
  * - balance       = feeFromSales − approvedPaid
@@ -39,7 +39,7 @@ export type PlatformFeePayment = {
  */
 export type PlatformFeeSummary = {
   salesTotal: number;
-  /** 1% of completed sales — fee generated from sales */
+  /** 2% of completed sales — fee generated from sales */
   feeFromSales: number;
   /** Approved bKash proofs total */
   approvedPaid: number;

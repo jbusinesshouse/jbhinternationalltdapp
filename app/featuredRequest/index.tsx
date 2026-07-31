@@ -181,12 +181,8 @@ const FeaturedRequest = () => {
               করলে সময়কাল বেছে নিতে পারবেন:
             </Text>
             <View style={local.pricingRow}>
-              <Text style={local.pricingDuration}>৭ দিন</Text>
-              <Text style={local.pricingAmount}>১,০০০ টাকা</Text>
-            </View>
-            <View style={local.pricingRow}>
               <Text style={local.pricingDuration}>১০ দিন</Text>
-              <Text style={local.pricingAmount}>১,২০০ টাকা</Text>
+              <Text style={local.pricingAmount}>১,০০০ টাকা</Text>
             </View>
           </View>
 

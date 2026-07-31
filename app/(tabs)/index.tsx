@@ -2,8 +2,10 @@ import FeaturedStores from "@/components/home/FeaturedStores";
 import HomeCategories from "@/components/home/HomeCategories";
 import TopBar from "@/components/home/TopBar";
 import SingleProduct from "@/components/SingleProduct";
+import WholesalePromoBanner from "@/components/WholesalePromoBanner";
 import { useAdvertisedProducts } from "@/hooks/useAdvertisedProducts";
 import { useFeaturedStores } from "@/hooks/useFeaturedStores";
+import { useProfile } from "@/hooks/useProfile";
 import { useShuffledProductFeed } from "@/hooks/useShuffledProductFeed";
 import { AdvertisedProduct } from "@/lib/productAds";
 import { ProductFeedItem } from "@/lib/productFeed";
@@ -26,6 +28,9 @@ type RenderProps = {
 };
 
 export default function Index() {
+  const { profile } = useProfile();
+  const isWholesale = profile?.store_type === "wholesale";
+
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(
     null
   );
@@ -105,6 +110,8 @@ export default function Index() {
   const flatHeaderSection = useMemo(
     () => (
       <View>
+        {isWholesale ? <WholesalePromoBanner href="/advertiseProduct" /> : null}
+
         <HomeCategories
           selectedCategoryId={selectedCategoryId}
           selectedSubcategoryId={selectedSubcategoryId}
@@ -139,6 +146,7 @@ export default function Index() {
       featuredLoading,
       feedTitle,
       advertisedProducts.length,
+      isWholesale,
     ]
   );
 
