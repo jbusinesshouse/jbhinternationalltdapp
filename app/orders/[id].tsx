@@ -1,7 +1,8 @@
+import { getReviewEligibility } from '@/lib/productReviews'
 import { supabase } from '@/lib/supabase'
 import { styles } from '@/styles/profile'
-import { useLocalSearchParams, useNavigation } from 'expo-router'
-import React, { useEffect, useState } from 'react'
+import { useFocusEffect, useLocalSearchParams, useNavigation, useRouter } from 'expo-router'
+import React, { useCallback, useState } from 'react'
 import {
     ActivityIndicator,
     Image,
@@ -39,17 +40,21 @@ type Order = {
     user_id: string
     order_items?: OrderItem[]
     products?: {
+        seller_id?: string
         product_images?: { image_url: string; is_main: boolean }[]
     } | null
 }
 
 const OrderDetails = () => {
     const navigation = useNavigation()
+    const router = useRouter()
     const { id } = useLocalSearchParams<{ id: string }>()
 
     const [order, setOrder] = useState<Order | null>(null)
     const [seller, setSeller] = useState<Seller | null>(null)
     const [loading, setLoading] = useState(true)
+    const [canReview, setCanReview] = useState(false)
+    const [alreadyReviewed, setAlreadyReviewed] = useState(false)
 
     const fetchOrder = async () => {
         if (!id) return
@@ -73,6 +78,7 @@ const OrderDetails = () => {
                         )
                 ),
                         products (
+                            seller_id,
                             product_images (
                                 image_url,
                                 is_main
@@ -85,12 +91,17 @@ const OrderDetails = () => {
             if (error) throw error
             setOrder(data as any)
 
-            // 2. Fetch seller separately
-            if (data?.user_id) {
+            // 2. Fetch seller (from product.seller_id, not buyer user_id)
+            const product = Array.isArray(data?.products)
+                ? data.products[0]
+                : data?.products
+            const sellerId = product?.seller_id as string | undefined
+
+            if (sellerId) {
                 const { data: profileData, error: profileError } = await supabase
                     .from('profiles')
                     .select('full_name, phone, store_name')
-                    .eq('id', data.user_id)
+                    .eq('id', sellerId)
                     .single()
 
                 if (profileError) {
@@ -99,6 +110,30 @@ const OrderDetails = () => {
                     }
                 }
                 else setSeller(profileData)
+            } else {
+                setSeller(null)
+            }
+
+            // 3. Review eligibility when order is completed
+            const {
+                data: { user },
+            } = await supabase.auth.getUser()
+
+            if (user && String(data.status).toLowerCase() === 'completed') {
+                try {
+                    const eligibility = await getReviewEligibility(id, user.id)
+                    setCanReview(eligibility.canReview)
+                    setAlreadyReviewed(eligibility.alreadyReviewed)
+                } catch (reviewErr) {
+                    if (__DEV__) {
+                        console.log('Review eligibility error:', reviewErr)
+                    }
+                    setCanReview(false)
+                    setAlreadyReviewed(false)
+                }
+            } else {
+                setCanReview(false)
+                setAlreadyReviewed(false)
             }
 
         } catch (err) {
@@ -108,9 +143,11 @@ const OrderDetails = () => {
         }
     }
 
-    useEffect(() => {
-        fetchOrder()
-    }, [id])
+    useFocusEffect(
+        useCallback(() => {
+            fetchOrder()
+        }, [id])
+    )
 
     if (loading) {
         return <View style={center}><ActivityIndicator size="large" /></View>
@@ -230,6 +267,32 @@ const OrderDetails = () => {
                     <Text style={[titleText, { color: getStatusColor() }]}>{order.status}</Text>
                 </Card>
 
+                {/* REVIEW */}
+                {String(order.status).toLowerCase() === 'completed' && (
+                    <Card>
+                        <SectionTitle>Review</SectionTitle>
+                        {alreadyReviewed ? (
+                            <Text style={subText}>You already reviewed this order.</Text>
+                        ) : canReview ? (
+                            <>
+                                <Text style={subText}>
+                                    How was this product? Share your experience with other buyers.
+                                </Text>
+                                <Pressable
+                                    onPress={() => router.push(`/review/${order.id}`)}
+                                    style={reviewBtn}
+                                >
+                                    <Text style={reviewBtnText}>Rate this product</Text>
+                                </Pressable>
+                            </>
+                        ) : (
+                            <Text style={subText}>
+                                Review is unavailable for this order right now.
+                            </Text>
+                        )}
+                    </Card>
+                )}
+
                 {/* CUSTOMER */}
                 <Card>
                     <SectionTitle>Customer Info</SectionTitle>
@@ -290,5 +353,13 @@ const variantRow = { marginTop: 6 } as const
 const variantBadgeRow = { flexDirection: 'row', gap: 6, flexWrap: 'wrap', marginBottom: 2 } as const
 const badge = { backgroundColor: '#f0f0f0', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 } as const
 const badgeText = { fontSize: 12, color: '#444', fontWeight: '500' } as const
+const reviewBtn = {
+    marginTop: 12,
+    backgroundColor: '#111',
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+} as const
+const reviewBtnText = { color: '#fff', fontSize: 14, fontWeight: '600' } as const
 
 export default OrderDetails

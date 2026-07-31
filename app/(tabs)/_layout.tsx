@@ -16,9 +16,11 @@ const TabLayout = () => {
                     tabBarIcon: ({ color }) => <IconSymbol size={28} name="house.fill" color={color} />,
                 }}
             />
+            {/* Category browse moved to Home — hide tab for now */}
             <Tabs.Screen
                 name="categories"
                 options={{
+                    href: null,
                     title: 'Categories',
                     tabBarIcon: ({ color }) => <IconSymbol size={28} name="paperplane.fill" color={color} />,
                 }}
@@ -30,14 +32,13 @@ const TabLayout = () => {
                     tabBarIcon: ({ color }) => <IconSymbol size={28} name="message" color={color} />,
                 }}
             />
-            {/* <Tabs.Screen
-                name="productUpload"
+            <Tabs.Screen
+                name="hub"
                 options={{
-                    href: null,
-                    title: 'Product Upload',
-                    tabBarIcon: ({ color }) => <IconSymbol size={28} name="message" color={color} />,
+                    title: 'Hub',
+                    tabBarIcon: ({ color }) => <IconSymbol size={28} name="info.circle.fill" color={color} />,
                 }}
-            /> */}
+            />
             <Tabs.Screen
                 name="profile"
                 options={{

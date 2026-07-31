@@ -1,12 +1,20 @@
 import RichTextEditor from '@/components/textEditor/RichTextEditor';
 import { useUser } from '@/context/UserContext';
+import {
+    parsePositiveInt,
+    parsePositiveNumber,
+    plainTextFromHtml,
+    removeProductStoragePaths,
+    softDeleteProduct,
+    uploadProductImage,
+} from '@/lib/productMedia';
 import { supabase } from '@/lib/supabase';
 import { styles } from '@/styles/productUpload';
 import Feather from '@expo/vector-icons/Feather';
 import { Picker } from '@react-native-picker/picker';
 import * as ImagePicker from 'expo-image-picker';
 import { useNavigation } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -46,9 +54,16 @@ type Subcategory = {
     category_id: string;
 }
 
+const MAX_ADDITIONAL_IMAGES = 8;
+
 const ProductUpload = () => {
     const { profile } = useUser();
     const navigation = useNavigation();
+    const sizesRequestIdRef = useRef(0);
+
+    const storeType = (profile as { store_type?: string } | null)?.store_type;
+    const isWholesale = storeType === 'wholesale';
+    const accountBlocked = !!(profile?.status && profile.status !== 'active');
 
     const [availableSizes, setAvailableSizes] = useState<DbSize[]>([]);
 
@@ -58,13 +73,12 @@ const ProductUpload = () => {
     const [parentCategory, setParentCategory] = useState<string | null>(null);
     const [parentCategoryId, setParentCategoryId] = useState<string | null>(null);
     const [category, setCategory] = useState('');
-    const [subCategoryId, setSubCategoryId] = useState<string | null>('');
+    const [subCategoryId, setSubCategoryId] = useState<string | null>(null);
     const [price, setPrice] = useState('');
     const [moq, setMoq] = useState('');
     const [description, setDescription] = useState('');
     const [variants, setVariants] = useState<Variant[]>([]);
 
-    // States for categories and subcategories
     const [categories, setCategories] = useState<Category[]>([]);
     const [allSubcategories, setAllSubcategories] = useState<Subcategory[]>([]);
     const [filteredSubcategories, setFilteredSubcategories] = useState<Subcategory[]>([]);
@@ -72,7 +86,6 @@ const ProductUpload = () => {
     const [loadingSubcategories, setLoadingSubcategories] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
-    // Fetch categories and subcategories from Supabase on mount
     useEffect(() => {
         fetchCategories();
         fetchAllSubcategories();
@@ -87,9 +100,7 @@ const ProductUpload = () => {
                 .order('name', { ascending: true });
 
             if (error) {
-                if (__DEV__) {
-                    console.error('Error fetching categories:', error);
-                }
+                if (__DEV__) console.error('Error fetching categories:', error);
                 Alert.alert('Error', 'Failed to load categories: ' + error.message);
                 return;
             }
@@ -97,15 +108,10 @@ const ProductUpload = () => {
             if (data && data.length > 0) {
                 setCategories(data);
             } else {
-                if (__DEV__) {
-                    console.log('No categories found in database');
-                }
                 Alert.alert('Notice', 'No categories found. Please add categories to the database.');
             }
         } catch (error) {
-            if (__DEV__) {
-                console.error('Exception fetching categories:', error);
-            }
+            if (__DEV__) console.error('Exception fetching categories:', error);
             Alert.alert('Error', 'An unexpected error occurred: ' + String(error));
         } finally {
             setLoadingCategories(false);
@@ -121,41 +127,25 @@ const ProductUpload = () => {
                 .order('name', { ascending: true });
 
             if (error) {
-                if (__DEV__) {
-                    console.error('Error fetching subcategories:', error);
-                }
+                if (__DEV__) console.error('Error fetching subcategories:', error);
                 Alert.alert('Error', 'Failed to load subcategories: ' + error.message);
                 return;
             }
 
-            if (data && data.length > 0) {
-                setAllSubcategories(data);
-            } else {
-                if (__DEV__) {
-                    console.log('No subcategories found in database');
-                }
-                setAllSubcategories([]);
-            }
+            setAllSubcategories(data ?? []);
         } catch (error) {
-            if (__DEV__) {
-                console.error('Exception fetching subcategories:', error);
-            }
+            if (__DEV__) console.error('Exception fetching subcategories:', error);
             Alert.alert('Error', 'An unexpected error occurred: ' + String(error));
         } finally {
             setLoadingSubcategories(false);
         }
     };
 
-    // Filter subcategories when parent category changes
     useEffect(() => {
         if (parentCategoryId && allSubcategories.length > 0) {
-            const filtered = allSubcategories.filter(subcat => {
-                const match = subcat.category_id == parentCategoryId ||
-                    subcat.category_id === parentCategoryId ||
-                    String(subcat.category_id) === String(parentCategoryId);
-                return match;
-            });
-
+            const filtered = allSubcategories.filter(subcat =>
+                String(subcat.category_id) === String(parentCategoryId)
+            );
             setFilteredSubcategories(filtered);
         } else {
             setFilteredSubcategories([]);
@@ -166,26 +156,37 @@ const ProductUpload = () => {
         const result = await ImagePicker.launchImageLibraryAsync({
             mediaTypes: ['images'],
             allowsEditing: true,
-            // aspect: [1, 1],
             quality: 0.8,
         });
         if (!result.canceled) setMainImage(result.assets[0].uri);
     };
 
     const pickAdditionalImages = async () => {
+        const remaining = MAX_ADDITIONAL_IMAGES - images.length;
+        if (remaining <= 0) {
+            Alert.alert('Limit reached', `You can add up to ${MAX_ADDITIONAL_IMAGES} additional images.`);
+            return;
+        }
+
         const result = await ImagePicker.launchImageLibraryAsync({
             mediaTypes: ['images'],
             allowsMultipleSelection: true,
             quality: 0.7,
+            selectionLimit: remaining,
         });
         if (!result.canceled) {
-            setImages(prev => [...prev, ...result.assets.map(a => a.uri)]);
+            setImages(prev =>
+                [...prev, ...result.assets.map(a => a.uri)].slice(0, MAX_ADDITIONAL_IMAGES)
+            );
         }
+    };
+
+    const removeAdditionalImage = (index: number) => {
+        setImages(prev => prev.filter((_, i) => i !== index));
     };
 
     const handleSelectCategory = (subcatId: string | null) => {
         setSubCategoryId(subcatId);
-
         const selected = filteredSubcategories.find(s => s.id === subcatId);
         setCategory(selected?.name || '');
     };
@@ -204,11 +205,9 @@ const ProductUpload = () => {
     const toggleSizeSelection = (variantIndex: number, size: DbSize): void => {
         const updatedVariants = [...variants];
         const variant = updatedVariants[variantIndex];
-
         if (!variant) return;
 
         const exists = variant.sizes.find(s => s.size_id === size.id);
-
         if (exists) {
             variant.sizes = variant.sizes.filter(s => s.size_id !== size.id);
         } else {
@@ -218,7 +217,6 @@ const ProductUpload = () => {
                 stock: ''
             });
         }
-
         setVariants(updatedVariants);
     };
 
@@ -229,89 +227,89 @@ const ProductUpload = () => {
     };
 
     useEffect(() => {
-        if (!parentCategory) return;
-        fetchSizes();
-    }, [parentCategory]);
-
-    const fetchSizes = async (): Promise<void> => {
-        if (!parentCategory) return;
-
-        const { data, error } = await supabase
-            .from('sizes')
-            .select('id, label, category')
-            .eq('category', parentCategory.toLowerCase())
-            .order('sort_order', { ascending: true });
-
-        if (error) {
-            if (__DEV__) {
-                console.error(error);
-            }
+        if (!parentCategory) {
+            setAvailableSizes([]);
             return;
         }
 
-        setAvailableSizes((data as DbSize[]) ?? []);
-    };
+        const requestId = ++sizesRequestIdRef.current;
 
-    // Upload image to Supabase Storage
-    const uploadImage = async (uri: string, path: string): Promise<string | null> => {
-        try {
-            const response = await fetch(uri);
-            const blob = await response.blob();
-            const arrayBuffer = await new Response(blob).arrayBuffer();
-            const fileExt = uri.split('.').pop() || 'jpg';
-            const fileName = `${path}/${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+        const fetchSizes = async (): Promise<void> => {
+            const { data, error } = await supabase
+                .from('sizes')
+                .select('id, label, category')
+                .eq('category', parentCategory.toLowerCase())
+                .order('sort_order', { ascending: true });
 
-            const { data, error } = await supabase.storage
-                .from('product-images')
-                .upload(fileName, arrayBuffer, {
-                    contentType: `image/${fileExt}`,
-                    upsert: false
-                });
+            if (requestId !== sizesRequestIdRef.current) return;
 
             if (error) {
-                if (__DEV__) {
-                    console.error('Upload error:', error);
-                }
-                return null;
+                if (__DEV__) console.error(error);
+                setAvailableSizes([]);
+                return;
             }
 
-            // Get public URL
-            const { data: urlData } = supabase.storage
-                .from('product-images')
-                .getPublicUrl(data.path);
+            setAvailableSizes((data as DbSize[]) ?? []);
+        };
 
-            return urlData.publicUrl;
-        } catch (error) {
-            if (__DEV__) {
-                console.error('Exception uploading image:', error);
-            }
-            return null;
-        }
+        fetchSizes();
+    }, [parentCategory]);
+
+    const resetForm = () => {
+        setMainImage(null);
+        setImages([]);
+        setName('');
+        setParentCategory(null);
+        setParentCategoryId(null);
+        setCategory('');
+        setSubCategoryId(null);
+        setPrice('');
+        setMoq('');
+        setDescription('');
+        setVariants([]);
+        setAvailableSizes([]);
     };
 
-    // Validation function
     const validateForm = (): string | null => {
+        if (!isWholesale) return 'Only wholesale sellers can upload products';
+        if (!profile) return 'Profile is still loading. Please try again.';
+        if (accountBlocked) {
+            return `Your account is currently ${profile.status === 'freeze' ? 'frozen' : profile.status}. You cannot upload products.`;
+        }
         if (!mainImage) return 'Please upload a main image';
         if (!name.trim()) return 'Please enter product name';
         if (!parentCategoryId) return 'Please select a target category';
-        if (!category.trim()) return 'Please select a specific category';
-        if (!price.trim() || parseFloat(price) <= 0) return 'Please enter a valid price';
-        if (!moq.trim() || parseInt(moq) <= 0) return 'Please enter a valid MOQ';
-        if (!description.trim()) return 'Please enter product description';
+        if (!subCategoryId || !category.trim()) return 'Please select a specific category';
+
+        const parsedPrice = parsePositiveNumber(price);
+        if (parsedPrice == null) return 'Please enter a valid price';
+
+        const parsedMoq = parsePositiveInt(moq);
+        if (parsedMoq == null) return 'Please enter a valid MOQ';
+
+        if (plainTextFromHtml(description).length === 0) {
+            return 'Please enter product description';
+        }
         if (variants.length === 0) return 'Please add at least one color variant';
 
-        // Validate each variant
+        const colorKeys = new Set<string>();
         for (let i = 0; i < variants.length; i++) {
             const variant = variants[i];
             if (!variant.color.trim()) {
                 return `Please enter color name for variant ${i + 1}`;
             }
+            const colorKey = variant.color.trim().toLowerCase();
+            if (colorKeys.has(colorKey)) {
+                return `Duplicate color "${variant.color.trim()}". Each color must be unique.`;
+            }
+            colorKeys.add(colorKey);
+
             if (variant.sizes.length === 0) {
                 return `Please select at least one size for ${variant.color}`;
             }
             for (let j = 0; j < variant.sizes.length; j++) {
                 const size = variant.sizes[j];
-                if (!size.stock.trim() || parseInt(size.stock) <= 0) {
+                if (parsePositiveInt(size.stock) == null) {
                     return `Please enter valid stock for ${variant.color} - ${size.label}`;
                 }
             }
@@ -320,16 +318,7 @@ const ProductUpload = () => {
         return null;
     };
 
-    // Submit handler
     const handleSubmit = async () => {
-        if (profile?.status && profile.status !== 'active') {
-            Alert.alert(
-                'Action Restricted',
-                `Your account is currently ${profile.status === "freeze" ? "frozen" : profile.status}. You cannot upload new products.`
-            );
-            return;
-        }
-        // Validate form
         const validationError = validateForm();
         if (validationError) {
             Alert.alert('Validation Error', validationError);
@@ -338,33 +327,22 @@ const ProductUpload = () => {
 
         setIsSubmitting(true);
 
+        let createdProductId: string | null = null;
+        const uploadedPaths: string[] = [];
+
         try {
-            // Get current user
             const { data: userData, error: userError } = await supabase.auth.getUser();
             if (userError || !userData.user) {
                 Alert.alert('Error', 'You must be logged in to upload products');
-                setIsSubmitting(false);
                 return;
             }
 
             const sellerId = userData.user.id;
+            const parsedPrice = parsePositiveNumber(price)!;
+            const parsedMoq = parsePositiveInt(moq)!;
 
-            // Step 1: Upload main image
-            const mainImageUrl = await uploadImage(mainImage!, 'main');
-            if (!mainImageUrl) {
-                Alert.alert('Error', 'Failed to upload main image');
-                setIsSubmitting(false);
-                return;
-            }
-
-            // Step 2: Upload additional images
-            const additionalImageUrls: string[] = [];
-            for (const img of images) {
-                const url = await uploadImage(img, 'additional');
-                if (url) additionalImageUrls.push(url);
-            }
-
-            // Step 3: Insert product
+            // 1) Create product first (avoids orphan files if insert fails)
+            // Explicit status matches live catalog behavior (DB samples are all "active").
             const { data: productData, error: productError } = await supabase
                 .from('products')
                 .insert({
@@ -374,87 +352,98 @@ const ProductUpload = () => {
                     category_id: parentCategoryId,
                     selected_category: category.trim(),
                     subcategory_id: subCategoryId,
-                    price: parseFloat(price),
-                    moq: parseInt(moq),
-                    active: true
+                    price: parsedPrice,
+                    moq: parsedMoq,
+                    active: true,
+                    status: 'active',
+                    is_deleted: false,
                 })
-                .select()
+                .select('id')
                 .single();
 
             if (productError || !productData) {
-                if (__DEV__) {
-                    console.error('Product insert error:', productError);
-                }
-                Alert.alert('Error', 'Failed to create product: ' + (productError?.message || 'Unknown error'));
-                setIsSubmitting(false);
+                if (__DEV__) console.error('Product insert error:', productError);
+                Alert.alert(
+                    'Error',
+                    'Failed to create product: ' + (productError?.message || 'Unknown error')
+                );
                 return;
             }
 
+            createdProductId = productData.id;
             const productId = productData.id;
+            const folder = `products/${productId}`;
 
-            // Step 4: Insert main image
+            // 2) Upload + attach main image
+            const mainUpload = await uploadProductImage(mainImage!, `${folder}/main`);
+            uploadedPaths.push(mainUpload.path);
+
             const { error: mainImageError } = await supabase
                 .from('product_images')
                 .insert({
                     product_id: productId,
-                    image_url: mainImageUrl,
+                    image_url: mainUpload.publicUrl,
                     is_main: true,
                     sort_order: 0
                 });
 
             if (mainImageError) {
-                if (__DEV__) {
-                    console.error('Main image insert error:', mainImageError);
-                }
+                throw new Error(mainImageError.message || 'Failed to save main image');
             }
 
-            // Step 5: Insert additional images
-            const additionalImagesData = additionalImageUrls.map((url, index) => ({
-                product_id: productId,
-                image_url: url,
-                is_main: false,
-                sort_order: index + 1
-            }));
+            // 3) Upload + attach additional images (all must succeed)
+            if (images.length > 0) {
+                const additionalRows: {
+                    product_id: string;
+                    image_url: string;
+                    is_main: boolean;
+                    sort_order: number;
+                }[] = [];
 
-            if (additionalImagesData.length > 0) {
+                for (let i = 0; i < images.length; i++) {
+                    const uploaded = await uploadProductImage(images[i], `${folder}/additional`);
+                    uploadedPaths.push(uploaded.path);
+                    additionalRows.push({
+                        product_id: productId,
+                        image_url: uploaded.publicUrl,
+                        is_main: false,
+                        sort_order: i + 1,
+                    });
+                }
+
                 const { error: additionalImagesError } = await supabase
                     .from('product_images')
-                    .insert(additionalImagesData);
+                    .insert(additionalRows);
 
                 if (additionalImagesError) {
-                    if (__DEV__) {
-                        console.error('Additional images insert error:', additionalImagesError);
-                    }
+                    throw new Error(
+                        additionalImagesError.message || 'Failed to save additional images'
+                    );
                 }
             }
 
-            // Step 6: Insert variants and sizes
+            // 4) Variants + sizes (hard-fail on any error)
             for (const variant of variants) {
-                // Insert variant
                 const { data: variantData, error: variantError } = await supabase
                     .from('product_variants')
                     .insert({
                         product_id: productId,
                         color: variant.color.trim()
                     })
-                    .select()
+                    .select('id')
                     .single();
 
                 if (variantError || !variantData) {
-                    if (__DEV__) {
-                        console.error('Variant insert error:', variantError);
-                    }
-                    continue;
+                    throw new Error(
+                        variantError?.message || `Failed to save color ${variant.color}`
+                    );
                 }
 
-                const variantId = variantData.id;
-
-                // Insert sizes for this variant
                 const sizesData = variant.sizes.map(size => ({
-                    variant_id: variantId,
+                    variant_id: variantData.id,
                     size_id: size.size_id,
                     size: size.label,
-                    stock: parseInt(size.stock)
+                    stock: parsePositiveInt(size.stock)!,
                 }));
 
                 const { error: sizesError } = await supabase
@@ -462,32 +451,41 @@ const ProductUpload = () => {
                     .insert(sizesData);
 
                 if (sizesError) {
-                    if (__DEV__) {
-                        console.error('Sizes insert error:', sizesError);
-                    }
+                    throw new Error(
+                        sizesError.message || `Failed to save sizes for ${variant.color}`
+                    );
                 }
             }
 
+            resetForm();
             Alert.alert(
                 'Success',
-                'Product uploaded successfully! Your product is sent for approval.',
-                [
-                    {
-                        text: 'OK',
-                        onPress: () => navigation.goBack()
-                    }
-                ]
+                'Product uploaded successfully!',
+                [{ text: 'OK', onPress: () => navigation.goBack() }]
             );
-
         } catch (error) {
-            if (__DEV__) {
-                console.error('Exception during submission:', error);
+            if (__DEV__) console.error('Exception during submission:', error);
+
+            if (createdProductId) {
+                await softDeleteProduct(createdProductId);
             }
-            Alert.alert('Error', 'An unexpected error occurred: ' + String(error));
+            if (uploadedPaths.length) {
+                await removeProductStoragePaths(uploadedPaths);
+            }
+
+            Alert.alert(
+                'Error',
+                error instanceof Error
+                    ? error.message
+                    : 'An unexpected error occurred: ' + String(error)
+            );
         } finally {
             setIsSubmitting(false);
         }
     };
+
+    const submitDisabled =
+        isSubmitting || accountBlocked || !isWholesale || !profile;
 
     return (
         <View style={styles.page}>
@@ -506,14 +504,40 @@ const ProductUpload = () => {
                 keyboardShouldPersistTaps="handled"
                 removeClippedSubviews={false}
             >
+                {!isWholesale && profile ? (
+                    <View style={styles.section}>
+                        <Text style={{ color: '#b91c1c', lineHeight: 20 }}>
+                            Only wholesale seller accounts can upload products.
+                        </Text>
+                    </View>
+                ) : null}
+
                 <View style={styles.section}>
                     <Text style={styles.sectionTitle}>Product Media</Text>
                     <Pressable style={styles.mainImageBox} onPress={pickMainImage}>
                         {mainImage ? <Image source={{ uri: mainImage }} style={styles.mainImage} /> : <Text style={styles.addImageText}>Upload Main Image</Text>}
                     </Pressable>
                     <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.imageRow}>
-                        {images.map((img, i) => <Image key={i} source={{ uri: img }} style={styles.thumb} />)}
-                        <Pressable style={styles.thumb} onPress={pickAdditionalImages}><Text style={styles.addImageTextPlus}>+</Text></Pressable>
+                        {images.map((img, i) => (
+                            <View key={`${img}-${i}`} style={{ position: 'relative', marginRight: 8 }}>
+                                <Image source={{ uri: img }} style={styles.thumb} />
+                                <Pressable
+                                    onPress={() => removeAdditionalImage(i)}
+                                    style={{
+                                        position: 'absolute', top: -6, right: -6,
+                                        backgroundColor: '#ef4444', borderRadius: 10,
+                                        width: 20, height: 20, justifyContent: 'center', alignItems: 'center'
+                                    }}
+                                >
+                                    <Feather name="x" size={12} color="#fff" />
+                                </Pressable>
+                            </View>
+                        ))}
+                        {images.length < MAX_ADDITIONAL_IMAGES ? (
+                            <Pressable style={styles.thumb} onPress={pickAdditionalImages}>
+                                <Text style={styles.addImageTextPlus}>+</Text>
+                            </Pressable>
+                        ) : null}
                     </ScrollView>
                 </View>
 
@@ -545,7 +569,7 @@ const ProductUpload = () => {
                                         setParentCategory(item.name);
                                         setParentCategoryId(item.id);
                                         setCategory('');
-                                        setSubCategoryId('')
+                                        setSubCategoryId(null);
                                         setVariants([]);
                                     }}
                                 >
@@ -602,7 +626,6 @@ const ProductUpload = () => {
                     <TextInput placeholder="Product Name" placeholderTextColor="#9CA3AF" value={name} onChangeText={setName} style={styles.input} />
                     <TextInput placeholder="Price (BDT) Per Item" placeholderTextColor="#9CA3AF" keyboardType="numeric" value={price} onChangeText={setPrice} style={styles.input} />
                     <TextInput placeholder="MOQ" placeholderTextColor="#9CA3AF" keyboardType="numeric" value={moq} onChangeText={setMoq} style={styles.input} />
-                    {/* <TextInput placeholder="Description" multiline value={description} onChangeText={setDescription} style={styles.textarea} /> */}
                     <RichTextEditor value={description} onChange={setDescription} />
                 </View>
 
@@ -644,7 +667,7 @@ const ProductUpload = () => {
                             </View>
 
                             {variant.sizes.map((sEntry, sIdx) => (
-                                <View key={sEntry.label} style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8 }}>
+                                <View key={sEntry.size_id} style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8 }}>
                                     <View style={{ width: 60 }}><Text style={{ fontWeight: '600' }}>{sEntry.label}:</Text></View>
                                     <TextInput
                                         placeholder="Quantity"
@@ -671,21 +694,22 @@ const ProductUpload = () => {
                     <Pressable
                         style={[
                             styles.submitBtn,
-                            (isSubmitting || (profile?.status && profile.status !== 'active')) && { opacity: 0.6, backgroundColor: '#9ca3af' }
+                            submitDisabled && { opacity: 0.6, backgroundColor: '#9ca3af' }
                         ]}
                         onPress={handleSubmit}
-                        // Disable if submitting OR if account is not active
-                        disabled={isSubmitting || (profile?.status && profile.status !== 'active')}
+                        disabled={submitDisabled}
                     >
                         {isSubmitting ? (
                             <ActivityIndicator color="#fff" />
                         ) : (
                             <Text style={styles.submitText}>
-                                {profile?.status === 'freeze'
-                                    ? "Account Frozen"
-                                    : profile?.status === 'restricted'
-                                        ? "Upload Restricted"
-                                        : "Upload Product"}
+                                {!isWholesale && profile
+                                    ? "Sellers Only"
+                                    : profile?.status === 'freeze'
+                                        ? "Account Frozen"
+                                        : profile?.status === 'restricted'
+                                            ? "Upload Restricted"
+                                            : "Upload Product"}
                             </Text>
                         )}
                     </Pressable>

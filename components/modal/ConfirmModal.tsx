@@ -12,10 +12,11 @@ type ConfirmModalProps = {
     title: string
     description?: string
     confirmText?: string
-    cancelText?: string
+    /** Pass `null` to hide the cancel button (single-action modals). */
+    cancelText?: string | null
     danger?: boolean
     onConfirm: () => void
-    onCancel: () => void
+    onCancel?: () => void
 }
 
 const ConfirmModal = ({
@@ -28,12 +29,15 @@ const ConfirmModal = ({
     onConfirm,
     onCancel,
 }: ConfirmModalProps) => {
+    const showCancel = cancelText != null && cancelText.length > 0
+    const handleDismiss = onCancel ?? onConfirm
+
     return (
         <Modal
             visible={visible}
             transparent
             animationType="fade"
-            onRequestClose={onCancel}
+            onRequestClose={handleDismiss}
         >
             <View style={styles.overlay}>
                 <View style={styles.card}>
@@ -46,11 +50,13 @@ const ConfirmModal = ({
                     ) : null}
 
                     <View style={styles.actions}>
-                        <Pressable onPress={onCancel} style={styles.cancelBtn}>
-                            <Text style={styles.cancelText}>
-                                {cancelText}
-                            </Text>
-                        </Pressable>
+                        {showCancel ? (
+                            <Pressable onPress={handleDismiss} style={styles.cancelBtn}>
+                                <Text style={styles.cancelText}>
+                                    {cancelText}
+                                </Text>
+                            </Pressable>
+                        ) : null}
 
                         <Pressable
                             onPress={onConfirm}

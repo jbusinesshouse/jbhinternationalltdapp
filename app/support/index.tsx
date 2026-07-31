@@ -23,7 +23,7 @@ const Support = () => {
 
     const handleSubmit = async () => {
         if (!subject.trim() || !message.trim()) {
-            Alert.alert('Missing Information', 'Please fill in all fields.')
+            Alert.alert('তথ্য অসম্পূর্ণ', 'অনুগ্রহ করে সব ঘর পূরণ করুন।')
             return
         }
 
@@ -57,8 +57,8 @@ const Support = () => {
             }
 
             Alert.alert(
-                'Request Submitted',
-                'Our support team will get back to you soon.',
+                'অনুরোধ জমা হয়েছে',
+                'আমাদের সাপোর্ট টিম শীঘ্রই আপনার সাথে যোগাযোগ করবে।',
                 [
                     {
                         text: 'OK',
@@ -75,8 +75,8 @@ const Support = () => {
                 console.error('Support error:', err)
             }
             Alert.alert(
-                'Error',
-                err.message || 'Something went wrong. Please try again.'
+                'সমস্যা',
+                err.message || 'কিছু সমস্যা হয়েছে। আবার চেষ্টা করুন।'
             )
         } finally {
             setSubmitting(false)
@@ -106,26 +106,26 @@ const Support = () => {
                 keyboardShouldPersistTaps="handled"
                 showsVerticalScrollIndicator={false}
             >
-                <Text style={styles.sectionTitle}>Need Help?</Text>
+                <Text style={styles.sectionTitle}>সাহায্য প্রয়োজন?</Text>
                 <Text style={styles.paragraph}>
-                    Submit your issue or question below and our support team will
-                    assist you as soon as possible.
+                    নিচে আপনার সমস্যা বা প্রশ্ন লিখে জমা দিন। আমাদের সাপোর্ট টিম
+                    যত দ্রুত সম্ভব আপনাকে সাহায্য করবে।
                 </Text>
 
-                <Text style={styles.inputLabel}>Subject</Text>
+                <Text style={styles.inputLabel}>বিষয়</Text>
                 <TextInput
                     value={subject}
                     onChangeText={setSubject}
-                    placeholder="Briefly describe your issue"
+                    placeholder="সংক্ষেপে সমস্যাটি লিখুন"
                     placeholderTextColor="#9CA3AF"
                     style={styles.input}
                 />
 
-                <Text style={styles.inputLabel}>Message</Text>
+                <Text style={styles.inputLabel}>বার্তা</Text>
                 <TextInput
                     value={message}
                     onChangeText={setMessage}
-                    placeholder="Write your message here..."
+                    placeholder="এখানে বিস্তারিত লিখুন..."
                     placeholderTextColor="#9CA3AF"
                     style={[styles.input, styles.textArea]}
                     multiline

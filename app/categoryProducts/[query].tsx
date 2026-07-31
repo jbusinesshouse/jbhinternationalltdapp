@@ -1,10 +1,12 @@
 import SingleProduct from "@/components/SingleProduct";
+import { useAdvertisedProducts } from "@/hooks/useAdvertisedProducts";
 import { useShuffledProductFeed } from "@/hooks/useShuffledProductFeed";
+import { AdvertisedProduct } from "@/lib/productAds";
 import { ProductFeedItem } from "@/lib/productFeed";
 import { supabase } from "@/lib/supabase";
 import { Image } from "expo-image";
 import { router, useLocalSearchParams } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -21,6 +23,10 @@ type SubCategory = {
   name: string;
 };
 
+type FeedRow = (ProductFeedItem | AdvertisedProduct) & {
+  isSponsored?: boolean;
+};
+
 export default function CategoryProducts() {
   const { query, name } = useLocalSearchParams();
 
@@ -33,6 +39,17 @@ export default function CategoryProducts() {
   const subcategoryId = selectedSub !== "all" ? selectedSub : undefined;
 
   const {
+    products: advertisedProducts,
+    productIds: advertisedIds,
+    loading: adsLoading,
+    refetch: refetchAds,
+  } = useAdvertisedProducts({
+    categoryId,
+    subcategoryId,
+    enabled: !!categoryId,
+  });
+
+  const {
     visibleProducts,
     initializing,
     refreshing,
@@ -42,8 +59,16 @@ export default function CategoryProducts() {
   } = useShuffledProductFeed({
     categoryId,
     subcategoryId,
-    enabled: !!categoryId,
+    excludeProductIds: advertisedIds,
+    enabled: !!categoryId && !adsLoading,
   });
+
+  const listData = useMemo<FeedRow[]>(() => {
+    if (adsLoading) return [];
+    const adIdSet = new Set(advertisedIds);
+    const organic = visibleProducts.filter((p) => !adIdSet.has(p.id));
+    return [...advertisedProducts, ...organic];
+  }, [adsLoading, advertisedProducts, advertisedIds, visibleProducts]);
 
   const PRIMARY_COLOR = "#f5832b";
 
@@ -91,6 +116,10 @@ export default function CategoryProducts() {
     });
   };
 
+  const handleRefresh = async () => {
+    await Promise.all([refetchAds(), onRefresh()]);
+  };
+
   const renderSubCategory = ({ item }: { item: SubCategory }) => {
     const isActive = selectedSub === item.id;
 
@@ -112,12 +141,13 @@ export default function CategoryProducts() {
     );
   };
 
-  const renderProduct = ({ item }: { item: ProductFeedItem }) => (
+  const renderProduct = ({ item }: { item: FeedRow }) => (
     <SingleProduct
       productId={item.id}
       title={item.name}
       price={item.price}
       moq={item.moq}
+      sponsored={!!item.isSponsored}
       productImg={
         item.productImg
           ? { uri: item.productImg }
@@ -134,6 +164,8 @@ export default function CategoryProducts() {
       </View>
     );
   };
+
+  const showLoader = (adsLoading || initializing) && listData.length === 0;
 
   return (
     <View style={styles.container}>
@@ -166,7 +198,7 @@ export default function CategoryProducts() {
         />
       </View>
 
-      {initializing && visibleProducts.length === 0 ? (
+      {showLoader ? (
         <ActivityIndicator
           color={PRIMARY_COLOR}
           size="large"
@@ -174,17 +206,31 @@ export default function CategoryProducts() {
         />
       ) : (
         <FlatList
-          data={visibleProducts}
+          data={listData}
           renderItem={renderProduct}
-          keyExtractor={(item) => item.id.toString()}
+          keyExtractor={(item) =>
+            item.isSponsored ? `ad-${item.id}` : item.id.toString()
+          }
           numColumns={2}
           columnWrapperStyle={styles.productRow}
           contentContainerStyle={styles.productList}
           onEndReached={handleEndReached}
           onEndReachedThreshold={0.5}
+          ListHeaderComponent={
+            advertisedProducts.length > 0 ? (
+              <Text style={styles.sponsoredHint}>
+                Promoted products shown first · refreshed randomly
+              </Text>
+            ) : null
+          }
           ListFooterComponent={listFooter}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              tintColor={PRIMARY_COLOR}
+              colors={[PRIMARY_COLOR]}
+            />
           }
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
@@ -202,7 +248,7 @@ export default function CategoryProducts() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F9F9F9",
+    backgroundColor: "#F3F4F6",
   },
   searchWrapper: {
     width: "100%",
@@ -212,12 +258,12 @@ const styles = StyleSheet.create({
   },
   searchInp: {
     height: 50,
-    borderRadius: 8,
+    borderRadius: 10,
     paddingLeft: 15,
     paddingRight: 75,
     fontSize: 16,
     borderWidth: 1,
-    borderColor: "#F0F0F0",
+    borderColor: "#E5E7EB",
     color: "#000000",
     backgroundColor: "#ffffff",
   },
@@ -243,7 +289,7 @@ const styles = StyleSheet.create({
     paddingTop: 60,
     paddingBottom: 15,
     borderBottomWidth: 1,
-    borderBottomColor: "#F0F0F0",
+    borderBottomColor: "#ECEFF3",
   },
   title: {
     fontSize: 24,
@@ -270,12 +316,20 @@ const styles = StyleSheet.create({
     color: "#777",
   },
   productList: {
-    paddingHorizontal: 15,
-    paddingTop: 20,
+    paddingHorizontal: 12,
+    paddingTop: 16,
     paddingBottom: 100,
   },
   productRow: {
     justifyContent: "space-between",
+    paddingBottom: 12,
+  },
+  sponsoredHint: {
+    fontSize: 12,
+    color: "#9CA3AF",
+    fontWeight: "500",
+    marginBottom: 12,
+    marginLeft: 2,
   },
   loader: {
     flex: 1,

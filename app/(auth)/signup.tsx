@@ -1,4 +1,5 @@
 import { useAuth } from '@/hooks/useAuth'
+import { compressAvatarImage } from '@/lib/compressImage'
 import { supabase } from '@/lib/supabase'
 import { Picker } from '@react-native-picker/picker'
 import Checkbox from 'expo-checkbox'
@@ -224,8 +225,10 @@ const Signup = () => {
             // Try to upload image using ArrayBuffer instead of Blob
             if (image) {
                 try {
+                    const compressed = await compressAvatarImage(image)
+
                     // Fetch the image as arrayBuffer
-                    const response = await fetch(image)
+                    const response = await fetch(compressed.uri)
                     const arrayBuffer = await response.arrayBuffer()
                     const filePath = `${userId}.jpg`
 

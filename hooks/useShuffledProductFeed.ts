@@ -11,12 +11,15 @@ import { useCallback, useEffect, useRef, useState } from "react";
 type UseShuffledProductFeedOptions = {
   categoryId?: string;
   subcategoryId?: string;
+  /** Product IDs already shown as sponsored — excluded from organic feed. */
+  excludeProductIds?: string[];
   enabled?: boolean;
 };
 
 export function useShuffledProductFeed({
   categoryId,
   subcategoryId,
+  excludeProductIds = [],
   enabled = true,
 }: UseShuffledProductFeedOptions = {}) {
   const { user, loading: authLoading } = useUser();
@@ -33,6 +36,12 @@ export function useShuffledProductFeed({
   const currentIndexRef = useRef(0);
   const blockedUserIdsRef = useRef<string[]>([]);
   const isFetchingBatchRef = useRef(false);
+  const excludeIdsKey = excludeProductIds.slice().sort().join("|");
+  const excludeIdsRef = useRef<Set<string>>(new Set(excludeProductIds));
+
+  useEffect(() => {
+    excludeIdsRef.current = new Set(excludeProductIds);
+  }, [excludeIdsKey, excludeProductIds]);
 
   const resolveBlockedUserIds = useCallback(async (): Promise<string[]> => {
     if (!user) return [];
@@ -128,7 +137,9 @@ export function useShuffledProductFeed({
       if (error) throw error;
 
       const ids = fisherYatesShuffle(
-        (data ?? []).map((row: { id: string }) => row.id)
+        (data ?? [])
+          .map((row: { id: string }) => row.id)
+          .filter((id: string) => !excludeIdsRef.current.has(id))
       );
 
       shuffledIdsRef.current = ids;
@@ -147,7 +158,7 @@ export function useShuffledProductFeed({
         console.log("Error initializing product feed:", error);
       }
     }
-  }, [categoryId, subcategoryId, resolveBlockedUserIds, fetchNextBatch]);
+  }, [categoryId, subcategoryId, excludeIdsKey, resolveBlockedUserIds, fetchNextBatch]);
 
   useEffect(() => {
     if (!enabled || authLoading) return;

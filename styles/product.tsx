@@ -129,7 +129,51 @@ export const styles = StyleSheet.create({
     },
     productTitle: {
         fontSize: 14,
-        marginBottom: 5,
+        marginBottom: 8,
+        color: '#111827',
+        fontWeight: '500',
+        lineHeight: 20,
+    },
+    categoryRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        flexWrap: 'wrap',
+        gap: 6,
+        marginBottom: 10,
+    },
+    categoryChip: {
+        backgroundColor: '#111827',
+        paddingHorizontal: 10,
+        paddingVertical: 5,
+        borderRadius: 8,
+    },
+    categoryChipText: {
+        color: '#ffffff',
+        fontSize: 11,
+        fontWeight: '700',
+        textTransform: 'capitalize',
+        letterSpacing: 0.2,
+    },
+    categorySeparator: {
+        fontSize: 14,
+        color: '#9CA3AF',
+        fontWeight: '600',
+        marginHorizontal: 1,
+    },
+    subcategoryChip: {
+        backgroundColor: '#FFF7ED',
+        borderWidth: 1,
+        borderColor: '#FED7AA',
+        paddingHorizontal: 10,
+        paddingVertical: 5,
+        borderRadius: 8,
+    },
+    subcategoryChipText: {
+        color: '#c2410c',
+        fontSize: 11,
+        fontWeight: '700',
+        textTransform: 'capitalize',
+        letterSpacing: 0.2,
     },
     ratingWrapper: {
         display: 'flex',
@@ -150,12 +194,12 @@ export const styles = StyleSheet.create({
 
     storeWrapper: {
         paddingHorizontal: 15,
-        paddingVertical: 10,
+        paddingVertical: 12,
         backgroundColor: '#ffffff',
         marginBottom: 10,
         display: 'flex',
         flexDirection: 'row',
-        alignItems: 'flex-start',
+        alignItems: 'center',
     },
     storeImgWrapper: {
         width: 45,
@@ -249,12 +293,19 @@ export const styles = StyleSheet.create({
     sizeItem: {
         display: 'flex',
         flexDirection: 'row',
+        flexWrap: 'wrap',
         alignItems: 'center',
         justifyContent: 'space-between',
         marginBottom: 10,
+        gap: 8,
+        width: '100%',
     },
     sizeItemIndic: {
         fontSize: 15,
+        flexGrow: 1,
+        flexShrink: 1,
+        flexBasis: '40%',
+        minWidth: 0,
     },
     sizeController: {
         display: 'flex',
@@ -264,6 +315,7 @@ export const styles = StyleSheet.create({
         borderColor: '#cccccc',
         borderWidth: 1,
         borderRadius: 25,
+        flexShrink: 0,
     },
     sizeConBtn: {
         width: 35,

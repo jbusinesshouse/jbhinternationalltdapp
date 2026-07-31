@@ -1,12 +1,20 @@
 import RichTextEditor from '@/components/textEditor/RichTextEditor';
 import { useUser } from '@/context/UserContext';
+import {
+    parsePositiveInt,
+    parsePositiveNumber,
+    plainTextFromHtml,
+    removeProductStoragePaths,
+    storagePathFromPublicUrl,
+    uploadProductImage,
+} from '@/lib/productMedia';
 import { supabase } from '@/lib/supabase';
 import { styles } from '@/styles/productUpload';
 import Feather from '@expo/vector-icons/Feather';
 import { Picker } from '@react-native-picker/picker';
 import * as ImagePicker from 'expo-image-picker';
 import { useLocalSearchParams, useNavigation } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -22,13 +30,13 @@ type SizeEntry = {
     size_id: string;
     label: string;
     stock: string;
-    db_size_id?: string; // existing product_sizes row id
+    db_size_id?: string;
 }
 
 type Variant = {
     color: string;
     sizes: SizeEntry[];
-    db_variant_id?: string; // existing product_variants row id
+    db_variant_id?: string;
 }
 
 type DbSize = {
@@ -48,10 +56,15 @@ type Subcategory = {
     category_id: string;
 }
 
+const MAX_ADDITIONAL_IMAGES = 8;
+
 const EditProduct = () => {
     const { profile } = useUser();
     const navigation = useNavigation();
     const { id } = useLocalSearchParams<{ id: string }>();
+    const sizesRequestIdRef = useRef(0);
+
+    const accountBlocked = !!(profile?.status && profile.status !== 'active');
 
     const [loading, setLoading] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -61,11 +74,12 @@ const EditProduct = () => {
     const [allSubcategories, setAllSubcategories] = useState<Subcategory[]>([]);
     const [filteredSubcategories, setFilteredSubcategories] = useState<Subcategory[]>([]);
 
-    // Product fields
     const [mainImage, setMainImage] = useState<string | null>(null);
+    const [originalMainImageUrl, setOriginalMainImageUrl] = useState<string | null>(null);
     const [mainImageIsNew, setMainImageIsNew] = useState(false);
     const [images, setImages] = useState<{ uri: string; isNew: boolean; dbId?: string }[]>([]);
     const [removedImageIds, setRemovedImageIds] = useState<string[]>([]);
+    const [removedImageUrls, setRemovedImageUrls] = useState<string[]>([]);
 
     const [name, setName] = useState('');
     const [price, setPrice] = useState('');
@@ -80,14 +94,12 @@ const EditProduct = () => {
     const [variants, setVariants] = useState<Variant[]>([]);
     const [removedVariantIds, setRemovedVariantIds] = useState<string[]>([]);
 
-    // ─── Load everything on mount ──────────────────────────────────────────────
     useEffect(() => {
         Promise.all([fetchCategories(), fetchAllSubcategories()]).then(() => {
             fetchProduct();
         });
     }, []);
 
-    // Filter subcategories when parent changes
     useEffect(() => {
         if (parentCategoryId && allSubcategories.length > 0) {
             setFilteredSubcategories(
@@ -98,12 +110,29 @@ const EditProduct = () => {
         }
     }, [parentCategoryId, allSubcategories]);
 
-    // Fetch sizes when parent category name changes
     useEffect(() => {
-        if (parentCategory) fetchSizes();
+        if (!parentCategory) {
+            setAvailableSizes([]);
+            return;
+        }
+
+        const requestId = ++sizesRequestIdRef.current;
+
+        const run = async () => {
+            const { data, error } = await supabase
+                .from('sizes')
+                .select('id, label, category')
+                .eq('category', parentCategory.toLowerCase())
+                .order('sort_order', { ascending: true });
+
+            if (requestId !== sizesRequestIdRef.current) return;
+            if (!error && data) setAvailableSizes(data as DbSize[]);
+            else setAvailableSizes([]);
+        };
+
+        run();
     }, [parentCategory]);
 
-    // ─── Fetchers ──────────────────────────────────────────────────────────────
     const fetchCategories = async () => {
         const { data, error } = await supabase
             .from('categories')
@@ -120,21 +149,10 @@ const EditProduct = () => {
         if (!error && data) setAllSubcategories(data);
     };
 
-    const fetchSizes = async () => {
-        if (!parentCategory) return;
-        const { data, error } = await supabase
-            .from('sizes')
-            .select('id, label, category')
-            .eq('category', parentCategory.toLowerCase())
-            .order('sort_order', { ascending: true });
-        if (!error && data) setAvailableSizes(data as DbSize[]);
-    };
-
     const fetchProduct = async () => {
         try {
             setLoading(true);
 
-            // Core product row
             const { data: product, error: productError } = await supabase
                 .from('products')
                 .select('*')
@@ -155,7 +173,6 @@ const EditProduct = () => {
             setSubCategoryId(product.subcategory_id || null);
             setParentCategoryId(product.category_id || null);
 
-            // Images
             const { data: imgData } = await supabase
                 .from('product_images')
                 .select('*')
@@ -164,7 +181,10 @@ const EditProduct = () => {
 
             if (imgData) {
                 const main = imgData.find(i => i.is_main);
-                if (main) setMainImage(main.image_url);
+                if (main) {
+                    setMainImage(main.image_url);
+                    setOriginalMainImageUrl(main.image_url);
+                }
 
                 const additional = imgData
                     .filter(i => !i.is_main)
@@ -172,7 +192,6 @@ const EditProduct = () => {
                 setImages(additional);
             }
 
-            // Variants + sizes
             const { data: variantData } = await supabase
                 .from('product_variants')
                 .select('*, product_sizes(*)')
@@ -192,7 +211,6 @@ const EditProduct = () => {
                 setVariants(mapped);
             }
 
-            // Set parent category name (triggers size fetch via useEffect)
             if (product.category_id) {
                 const { data: catData } = await supabase
                     .from('categories')
@@ -209,7 +227,6 @@ const EditProduct = () => {
         }
     };
 
-    // ─── Image helpers ─────────────────────────────────────────────────────────
     const pickMainImage = async () => {
         const result = await ImagePicker.launchImageLibraryAsync({
             mediaTypes: ['images'],
@@ -223,31 +240,53 @@ const EditProduct = () => {
     };
 
     const pickAdditionalImages = async () => {
+        const remaining = MAX_ADDITIONAL_IMAGES - images.length;
+        if (remaining <= 0) {
+            Alert.alert('Limit reached', `You can add up to ${MAX_ADDITIONAL_IMAGES} additional images.`);
+            return;
+        }
+
         const result = await ImagePicker.launchImageLibraryAsync({
             mediaTypes: ['images'],
             allowsMultipleSelection: true,
             quality: 0.7,
+            selectionLimit: remaining,
         });
         if (!result.canceled) {
             const newImgs = result.assets.map(a => ({ uri: a.uri, isNew: true }));
-            setImages(prev => [...prev, ...newImgs]);
+            setImages(prev => [...prev, ...newImgs].slice(0, MAX_ADDITIONAL_IMAGES));
         }
     };
 
     const removeAdditionalImage = (index: number) => {
         const img = images[index];
         if (img.dbId) setRemovedImageIds(prev => [...prev, img.dbId!]);
+        if (!img.isNew) setRemovedImageUrls(prev => [...prev, img.uri]);
         setImages(prev => prev.filter((_, i) => i !== index));
     };
 
-    // ─── Category helpers ──────────────────────────────────────────────────────
     const handleSelectSubcategory = (subcatId: string | null) => {
         setSubCategoryId(subcatId);
         const selected = filteredSubcategories.find(s => s.id === subcatId);
         setCategory(selected?.name || '');
     };
 
-    // ─── Variant helpers ───────────────────────────────────────────────────────
+    const handleParentCategoryChange = (item: Category) => {
+        const existingIds = variants
+            .map(v => v.db_variant_id)
+            .filter((vid): vid is string => !!vid);
+
+        if (existingIds.length) {
+            setRemovedVariantIds(prev => [...new Set([...prev, ...existingIds])]);
+        }
+
+        setParentCategory(item.name);
+        setParentCategoryId(item.id);
+        setCategory('');
+        setSubCategoryId(null);
+        setVariants([]);
+    };
+
     const addColorVariant = () => {
         setVariants(prev => [...prev, { color: '', sizes: [] }]);
     };
@@ -273,14 +312,11 @@ const EditProduct = () => {
             const variant = updated[variantIndex];
             if (!variant) return prev;
 
-            // Strictly check by size_id
             const existingIndex = variant.sizes.findIndex(s => s.size_id === size.id);
 
             if (existingIndex > -1) {
-                // If it exists, remove it
                 variant.sizes.splice(existingIndex, 1);
             } else {
-                // If it doesn't exist, add it
                 variant.sizes.push({
                     size_id: size.id,
                     label: size.label,
@@ -297,64 +333,40 @@ const EditProduct = () => {
         setVariants(updated);
     };
 
-    // ─── Upload helper ─────────────────────────────────────────────────────────
-    const uploadImage = async (uri: string, path: string): Promise<string | null> => {
-        try {
-            const response = await fetch(uri);
-            const blob = await response.blob();
-            const arrayBuffer = await new Response(blob).arrayBuffer();
-            const fileExt = uri.split('.').pop() || 'jpg';
-            const fileName = `${path}/${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
-
-            const { data, error } = await supabase.storage
-                .from('product-images')
-                .upload(fileName, arrayBuffer, { contentType: `image/${fileExt}`, upsert: false });
-
-            if (error) return null;
-
-            const { data: urlData } = supabase.storage
-                .from('product-images')
-                .getPublicUrl(data.path);
-
-            return urlData.publicUrl;
-        } catch {
-            return null;
-        }
-    };
-
-    // ─── Validation ────────────────────────────────────────────────────────────
     const validateForm = (): string | null => {
+        if (!profile) return 'Profile is still loading. Please try again.';
+        if (accountBlocked) {
+            return `Your account is currently ${profile.status === 'freeze' ? 'frozen' : profile.status}. You cannot edit products.`;
+        }
         if (!mainImage) return 'Please upload a main image';
         if (!name.trim()) return 'Please enter product name';
         if (!parentCategoryId) return 'Please select a target category';
-        if (!category.trim()) return 'Please select a specific category';
-        if (!price.trim() || parseFloat(price) <= 0) return 'Please enter a valid price';
-        if (!moq.trim() || parseInt(moq) <= 0) return 'Please enter a valid MOQ';
-        if (!description.trim()) return 'Please enter product description';
+        if (!subCategoryId || !category.trim()) return 'Please select a specific category';
+        if (parsePositiveNumber(price) == null) return 'Please enter a valid price';
+        if (parsePositiveInt(moq) == null) return 'Please enter a valid MOQ';
+        if (plainTextFromHtml(description).length === 0) return 'Please enter product description';
         if (variants.length === 0) return 'Please add at least one color variant';
 
+        const colorKeys = new Set<string>();
         for (let i = 0; i < variants.length; i++) {
             const v = variants[i];
             if (!v.color.trim()) return `Please enter color name for variant ${i + 1}`;
+            const colorKey = v.color.trim().toLowerCase();
+            if (colorKeys.has(colorKey)) {
+                return `Duplicate color "${v.color.trim()}". Each color must be unique.`;
+            }
+            colorKeys.add(colorKey);
             if (v.sizes.length === 0) return `Please select at least one size for ${v.color}`;
             for (const s of v.sizes) {
-                if (!s.stock.trim() || parseInt(s.stock) <= 0)
+                if (parsePositiveInt(s.stock) == null) {
                     return `Please enter valid stock for ${v.color} - ${s.label}`;
+                }
             }
         }
         return null;
     };
 
-    // ─── Submit ────────────────────────────────────────────────────────────────
     const handleSubmit = async () => {
-        if (profile?.status && profile.status !== 'active') {
-            Alert.alert(
-                'Action Restricted',
-                `Your account is currently ${profile.status === "freeze" ? "frozen" : profile.status}. You cannot edit your products.`
-            );
-            return;
-        }
-
         const validationError = validateForm();
         if (validationError) {
             Alert.alert('Validation Error', validationError);
@@ -362,8 +374,12 @@ const EditProduct = () => {
         }
 
         setIsSubmitting(true);
+        const newlyUploadedPaths: string[] = [];
+
         try {
-            // 1. Update core product row
+            const parsedPrice = parsePositiveNumber(price)!;
+            const parsedMoq = parsePositiveInt(moq)!;
+
             const { error: productError } = await supabase
                 .from('products')
                 .update({
@@ -372,8 +388,8 @@ const EditProduct = () => {
                     category_id: parentCategoryId,
                     selected_category: category.trim(),
                     subcategory_id: subCategoryId,
-                    price: parseFloat(price),
-                    moq: parseInt(moq),
+                    price: parsedPrice,
+                    moq: parsedMoq,
                 })
                 .eq('id', id);
 
@@ -382,64 +398,108 @@ const EditProduct = () => {
                 return;
             }
 
-            // 2. Replace main image if changed
             if (mainImageIsNew && mainImage) {
-                const newUrl = await uploadImage(mainImage, 'main');
-                if (newUrl) {
-                    // Delete old main image record, insert new
-                    await supabase
-                        .from('product_images')
-                        .delete()
-                        .eq('product_id', id)
-                        .eq('is_main', true);
+                const uploaded = await uploadProductImage(mainImage, `products/${id}/main`);
+                newlyUploadedPaths.push(uploaded.path);
 
-                    await supabase
-                        .from('product_images')
-                        .insert({ product_id: id, image_url: newUrl, is_main: true, sort_order: 0 });
+                const { error: deleteMainError } = await supabase
+                    .from('product_images')
+                    .delete()
+                    .eq('product_id', id)
+                    .eq('is_main', true);
+
+                if (deleteMainError) {
+                    throw new Error(deleteMainError.message || 'Failed to replace main image');
+                }
+
+                const { error: insertMainError } = await supabase
+                    .from('product_images')
+                    .insert({
+                        product_id: id,
+                        image_url: uploaded.publicUrl,
+                        is_main: true,
+                        sort_order: 0,
+                    });
+
+                if (insertMainError) {
+                    throw new Error(insertMainError.message || 'Failed to save main image');
+                }
+
+                const oldMainPath = originalMainImageUrl
+                    ? storagePathFromPublicUrl(originalMainImageUrl)
+                    : null;
+                if (oldMainPath) {
+                    await removeProductStoragePaths([oldMainPath]);
                 }
             }
 
-            // 3. Remove deleted additional images
             if (removedImageIds.length > 0) {
-                await supabase
+                const { error: removeImgError } = await supabase
                     .from('product_images')
                     .delete()
                     .in('id', removedImageIds);
+
+                if (removeImgError) {
+                    throw new Error(removeImgError.message || 'Failed to remove images');
+                }
+
+                const paths = removedImageUrls
+                    .map(storagePathFromPublicUrl)
+                    .filter((p): p is string => !!p);
+                await removeProductStoragePaths(paths);
             }
 
-            // 4. Upload new additional images
             const newAdditional = images.filter(i => i.isNew);
-            for (const img of newAdditional) {
-                const url = await uploadImage(img.uri, 'additional');
-                if (url) {
-                    await supabase
-                        .from('product_images')
-                        .insert({ product_id: id, image_url: url, is_main: false, sort_order: 99 });
+            for (let i = 0; i < newAdditional.length; i++) {
+                const uploaded = await uploadProductImage(
+                    newAdditional[i].uri,
+                    `products/${id}/additional`
+                );
+                newlyUploadedPaths.push(uploaded.path);
+
+                const { error: insertAdditionalError } = await supabase
+                    .from('product_images')
+                    .insert({
+                        product_id: id,
+                        image_url: uploaded.publicUrl,
+                        is_main: false,
+                        sort_order: 99 + i,
+                    });
+
+                if (insertAdditionalError) {
+                    throw new Error(
+                        insertAdditionalError.message || 'Failed to save additional image'
+                    );
                 }
             }
 
-            // 5. Delete removed variants (cascade deletes sizes)
-            if (__DEV__) {
-                console.log(removedVariantIds.length);
-            }
-
             if (removedVariantIds.length > 0) {
-                await supabase
+                const { error: removeVariantError } = await supabase
                     .from('product_variants')
                     .delete()
                     .in('id', removedVariantIds);
+
+                if (removeVariantError) {
+                    throw new Error(
+                        removeVariantError.message || 'Failed to remove old variants'
+                    );
+                }
             }
 
-            // 6. Upsert variants and sizes
             for (const variant of variants) {
                 let variantId = variant.db_variant_id;
 
-                // ✅ UPDATE or CREATE VARIANT
                 if (variantId) {
-                    await supabase
+                    const { error: updateVariantError } = await supabase
                         .from('product_variants')
                         .update({ color: variant.color.trim() })
                         .eq('id', variantId);
+
+                    if (updateVariantError) {
+                        throw new Error(
+                            updateVariantError.message || `Failed to update ${variant.color}`
+                        );
+                    }
                 } else {
                     const { data: newVariant, error: vErr } = await supabase
                         .from('product_variants')
@@ -447,67 +507,86 @@ const EditProduct = () => {
                             product_id: id,
                             color: variant.color.trim()
                         })
-                        .select()
+                        .select('id')
                         .single();
 
                     if (vErr || !newVariant) {
-                        if (__DEV__) {
-                            console.error('Variant insert error:', vErr);
-                        }
-                        continue;
+                        throw new Error(
+                            vErr?.message || `Failed to create color ${variant.color}`
+                        );
                     }
 
                     variantId = newVariant.id;
                 }
 
-                // ✅ GET existing sizes
-                const { data: existingSizes } = await supabase
+                const { data: existingSizes, error: existingSizesError } = await supabase
                     .from('product_sizes')
                     .select('id')
                     .eq('variant_id', variantId);
 
+                if (existingSizesError) {
+                    throw new Error(existingSizesError.message || 'Failed to load sizes');
+                }
+
                 const existingIds = new Set(existingSizes?.map(s => s.id) || []);
                 const incomingIds = new Set<string>();
 
-                // ✅ UPDATE or INSERT
                 for (const size of variant.sizes) {
+                    const stock = parsePositiveInt(size.stock)!;
+
                     if (size.db_size_id) {
                         incomingIds.add(size.db_size_id);
 
-                        await supabase
+                        const { error: sizeUpdateError } = await supabase
                             .from('product_sizes')
                             .update({
                                 size: size.label,
                                 size_id: size.size_id,
-                                stock: parseInt(size.stock)
+                                stock,
                             })
                             .eq('id', size.db_size_id);
 
+                        if (sizeUpdateError) {
+                            throw new Error(
+                                sizeUpdateError.message ||
+                                `Failed to update size ${size.label}`
+                            );
+                        }
                     } else {
-                        const { data: newSize } = await supabase
+                        const { data: newSize, error: sizeInsertError } = await supabase
                             .from('product_sizes')
                             .insert({
                                 variant_id: variantId,
                                 size: size.label,
                                 size_id: size.size_id,
-                                stock: parseInt(size.stock)
+                                stock,
                             })
-                            .select()
+                            .select('id')
                             .single();
 
-                        if (newSize) {
-                            incomingIds.add(newSize.id);
+                        if (sizeInsertError || !newSize) {
+                            throw new Error(
+                                sizeInsertError?.message ||
+                                `Failed to add size ${size.label}`
+                            );
                         }
+
+                        incomingIds.add(newSize.id);
                     }
                 }
 
-                // ✅ DELETE removed sizes
                 for (const existingId of existingIds) {
                     if (!incomingIds.has(existingId)) {
-                        await supabase
+                        const { error: sizeDeleteError } = await supabase
                             .from('product_sizes')
                             .delete()
                             .eq('id', existingId);
+
+                        if (sizeDeleteError) {
+                            throw new Error(
+                                sizeDeleteError.message || 'Failed to remove a size'
+                            );
+                        }
                     }
                 }
             }
@@ -517,13 +596,18 @@ const EditProduct = () => {
             ]);
 
         } catch (err) {
-            Alert.alert('Error', 'Unexpected error: ' + String(err));
+            if (newlyUploadedPaths.length) {
+                await removeProductStoragePaths(newlyUploadedPaths);
+            }
+            Alert.alert(
+                'Error',
+                err instanceof Error ? err.message : 'Unexpected error: ' + String(err)
+            );
         } finally {
             setIsSubmitting(false);
         }
     };
 
-    // ─── Render ────────────────────────────────────────────────────────────────
     if (loading) {
         return (
             <View style={[styles.page, { justifyContent: 'center', alignItems: 'center' }]}>
@@ -532,6 +616,8 @@ const EditProduct = () => {
             </View>
         );
     }
+
+    const submitDisabled = isSubmitting || accountBlocked || !profile;
 
     return (
         <View style={styles.page}>
@@ -549,7 +635,6 @@ const EditProduct = () => {
                 keyboardShouldPersistTaps="handled"
                 removeClippedSubviews={false}
             >
-                {/* ── Media ── */}
                 <View style={styles.section}>
                     <Text style={styles.sectionTitle}>Product Media</Text>
                     <Pressable style={styles.mainImageBox} onPress={pickMainImage}>
@@ -560,7 +645,7 @@ const EditProduct = () => {
 
                     <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.imageRow}>
                         {images.map((img, i) => (
-                            <View key={i} style={{ position: 'relative', marginRight: 8 }}>
+                            <View key={img.dbId ?? `${img.uri}-${i}`} style={{ position: 'relative', marginRight: 8 }}>
                                 <Image source={{ uri: img.uri }} style={styles.thumb} />
                                 <Pressable
                                     onPress={() => removeAdditionalImage(i)}
@@ -574,13 +659,14 @@ const EditProduct = () => {
                                 </Pressable>
                             </View>
                         ))}
-                        <Pressable style={styles.thumb} onPress={pickAdditionalImages}>
-                            <Text style={styles.addImageTextPlus}>+</Text>
-                        </Pressable>
+                        {images.length < MAX_ADDITIONAL_IMAGES ? (
+                            <Pressable style={styles.thumb} onPress={pickAdditionalImages}>
+                                <Text style={styles.addImageTextPlus}>+</Text>
+                            </Pressable>
+                        ) : null}
                     </ScrollView>
                 </View>
 
-                {/* ── Target Category ── */}
                 <View style={styles.section}>
                     <Text style={styles.sectionTitle}>Target Category</Text>
                     {categories.length === 0 ? (
@@ -595,13 +681,7 @@ const EditProduct = () => {
                                         { width: 90, justifyContent: 'center', alignItems: 'center' },
                                         parentCategory === item.name && styles.activeCat
                                     ]}
-                                    onPress={() => {
-                                        setParentCategory(item.name);
-                                        setParentCategoryId(item.id);
-                                        setCategory('');
-                                        setSubCategoryId(null);
-                                        setVariants([]);
-                                    }}
+                                    onPress={() => handleParentCategoryChange(item)}
                                 >
                                     <Text style={[
                                         styles.tarCatText,
@@ -615,7 +695,6 @@ const EditProduct = () => {
                     )}
                 </View>
 
-                {/* ── Subcategory ── */}
                 {parentCategoryId && (
                     <View style={styles.section}>
                         <Text style={styles.sectionTitle}>Sub Category</Text>
@@ -637,7 +716,6 @@ const EditProduct = () => {
                     </View>
                 )}
 
-                {/* ── Basic Info ── */}
                 <View style={styles.section}>
                     <TextInput placeholder="Product Name" placeholderTextColor="#9CA3AF" value={name} onChangeText={setName} style={styles.input} />
                     <TextInput placeholder="Price (BDT) Per Item" placeholderTextColor="#9CA3AF" keyboardType="numeric" value={price} onChangeText={setPrice} style={styles.input} />
@@ -645,11 +723,10 @@ const EditProduct = () => {
                     <RichTextEditor value={description} onChange={setDescription} />
                 </View>
 
-                {/* ── Variants ── */}
                 <View style={styles.section}>
                     <Text style={styles.sectionTitle}>Inventory Variants</Text>
                     {variants.map((variant, vIdx) => (
-                        <View key={vIdx} style={styles.variantBox}>
+                        <View key={variant.db_variant_id ?? `new-${vIdx}`} style={styles.variantBox}>
                             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
                                 <TextInput
                                     placeholder="Color (e.g. Red)"
@@ -668,7 +745,6 @@ const EditProduct = () => {
                             <Text style={[styles.sectionTitle, { fontSize: 12 }]}>Select Sizes:</Text>
                             <View style={styles.sizesRow}>
                                 {availableSizes.map(size => {
-                                    // FIX: Only compare by ID for consistency
                                     const isSelected = variant.sizes.some(s => s.size_id === size.id);
 
                                     return (
@@ -686,7 +762,6 @@ const EditProduct = () => {
                             </View>
 
                             {variant.sizes.map((sEntry, sIdx) => (
-                                // FIX: Use size_id for the key instead of label
                                 <View key={sEntry.size_id} style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8 }}>
                                     <View style={{ width: 60 }}>
                                         <Text style={{ fontWeight: '600' }}>{sEntry.label}:</Text>
@@ -711,19 +786,24 @@ const EditProduct = () => {
                     )}
                 </View>
 
-                {/* ── Submit ── */}
                 <View style={styles.submitWrapper}>
                     <Pressable
                         style={[
                             styles.submitBtn,
-                            (isSubmitting || (profile?.status && profile.status !== 'active')) && { opacity: 0.6, backgroundColor: '#9ca3af' }
+                            submitDisabled && { opacity: 0.6, backgroundColor: '#9ca3af' }
                         ]}
                         onPress={handleSubmit}
-                        disabled={isSubmitting}
+                        disabled={submitDisabled}
                     >
                         {isSubmitting
                             ? <ActivityIndicator color="#fff" />
-                            : <Text style={styles.submitText}>Save Changes</Text>}
+                            : <Text style={styles.submitText}>
+                                {profile?.status === 'freeze'
+                                    ? 'Account Frozen'
+                                    : profile?.status === 'restricted'
+                                        ? 'Edit Restricted'
+                                        : 'Save Changes'}
+                            </Text>}
                     </Pressable>
                 </View>
             </ScrollView>

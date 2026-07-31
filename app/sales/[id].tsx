@@ -136,6 +136,45 @@ const SalesDetails = () => {
         }
     }
 
+    const notifyBuyerOrderCompleted = async () => {
+        if (!order?.user_id) return
+
+        try {
+            const { data: existing, error: existingError } = await supabase
+                .from('notifications')
+                .select('id')
+                .eq('order_id', order.id)
+                .eq('type', 'order_review_request')
+                .limit(1)
+
+            if (existingError) throw existingError
+            if (existing && existing.length > 0) return
+
+            const productName =
+                order.order_items?.[0]?.product_name_snapshot || 'your order'
+
+            const { error } = await supabase.from('notifications').insert([
+                {
+                    user_id: order.user_id,
+                    title: 'Order delivered — leave a review',
+                    message: `Your order for ${productName} is complete. Tap to rate the product.`,
+                    type: 'order_review_request',
+                    order_id: order.id,
+                    is_read: false,
+                    action_completed: false,
+                },
+            ])
+
+            if (error && __DEV__) {
+                console.log('Review notification error:', error)
+            }
+        } catch (err) {
+            if (__DEV__) {
+                console.log('Review notification error:', err)
+            }
+        }
+    }
+
     const confirmUpdate = async (statusToApply: string) => {
         if (!order || !statusToApply) return
         if (order.status?.toLowerCase() === 'hold') return
@@ -160,6 +199,13 @@ const SalesDetails = () => {
                 .eq('id', order.id)
 
             if (error) throw error
+
+            if (
+                statusToApply === 'completed' &&
+                oldStatus?.toLowerCase() !== 'completed'
+            ) {
+                await notifyBuyerOrderCompleted()
+            }
 
         } catch (err) {
             if (__DEV__) {

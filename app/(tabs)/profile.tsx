@@ -2,6 +2,7 @@ import ConfirmModal from '@/components/modal/ConfirmModal'
 import { useUser } from '@/context/UserContext'
 import { useAuth } from '@/hooks/useAuth'
 import { useProfile } from '@/hooks/useProfile'
+import { compressAvatarImage } from '@/lib/compressImage'
 import { supabase } from '@/lib/supabase'
 import { styles } from '@/styles/profile'
 import { Picker } from '@react-native-picker/picker'
@@ -362,8 +363,10 @@ const Profile = () => {
             const userId = profile.id
             const filePath = `${userId}.jpg`
 
+            const compressed = await compressAvatarImage(uri)
+
             // 🔹 Convert to ArrayBuffer (same as signup)
-            const response = await fetch(uri)
+            const response = await fetch(compressed.uri)
             const arrayBuffer = await response.arrayBuffer()
 
             // 🔹 Upload (overwrite old image)
@@ -530,6 +533,18 @@ const Profile = () => {
                 <View style={styles.section}>
                     {isSeller && stsProfil?.status === "active" && <ProductUpComp title="Upload Product" />}
                     {isSeller && <ProfileLink title="Sales Orders" link="/sales" />}
+                    {isSeller && (
+                        <ProfileLink
+                            title="Store Promotion"
+                            link="/featuredRequest"
+                        />
+                    )}
+                    {isSeller && (
+                        <ProfileLink
+                            title="Advertise Product"
+                            link="/advertiseProduct"
+                        />
+                    )}
                     {isBuyer && <ProfileLink title="My Orders" link="/orders" />}
                 </View>
 

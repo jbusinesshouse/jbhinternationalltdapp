@@ -1,6 +1,12 @@
 import HtmlRender from "@/components/htmlRender/HtmlRenter";
+import RelatedProductsSection from "@/components/product/RelatedProductsSection";
 import { useUser } from "@/context/UserContext";
 import { findOrCreateChatRoom } from "@/lib/chat";
+import {
+    ProductReview,
+    fetchProductRatingSummary,
+    fetchReviewsForProduct,
+} from "@/lib/productReviews";
 import { supabase } from "@/lib/supabase";
 import { styles } from "@/styles/product";
 import Feather from "@expo/vector-icons/Feather";
@@ -32,6 +38,9 @@ type Product = {
     moq: number;
     description: string;
     seller_id: string;
+    category_id: string | null;
+    subcategory_id: string | null;
+    selected_category: string | null;
     product_images: {
         image_url: string;
         is_main: boolean;
@@ -41,6 +50,8 @@ type Product = {
         store_name: string;
         avatar_url: string | null;
     } | null;
+    categories: { id: string; name: string } | null;
+    subcategories: { id: string; name: string } | null;
 };
 
 type Variant = {
@@ -87,6 +98,10 @@ const ProductPreview = () => {
     const [sizes, setSizes] = useState<Size[]>([]);
     const [refreshing, setRefreshing] = useState(false);
     const [textSellerLoading, setTextSellerLoading] = useState(false);
+    const [reviews, setReviews] = useState<ProductReview[]>([]);
+    const [ratingSummary, setRatingSummary] = useState({ average: 0, count: 0 });
+    const [reviewImagePreview, setReviewImagePreview] = useState<string | null>(null);
+    const [relatedRefreshKey, setRelatedRefreshKey] = useState(0);
 
     const { id } = useLocalSearchParams<{ id: string }>();
     const { width, height } = useWindowDimensions();
@@ -118,6 +133,9 @@ const ProductPreview = () => {
                 moq,
                 description,
                 seller_id,
+                category_id,
+                subcategory_id,
+                selected_category,
                 product_images (
                     image_url,
                     is_main
@@ -126,6 +144,14 @@ const ProductPreview = () => {
                     id,
                     store_name,
                     avatar_url
+                ),
+                categories (
+                    id,
+                    name
+                ),
+                subcategories (
+                    id,
+                    name
                 )
             `)
             .eq("id", id)
@@ -143,6 +169,12 @@ const ProductPreview = () => {
             seller: Array.isArray(data.seller)
                 ? data.seller[0]
                 : data.seller,
+            categories: Array.isArray(data.categories)
+                ? data.categories[0] ?? null
+                : data.categories ?? null,
+            subcategories: Array.isArray(data.subcategories)
+                ? data.subcategories[0] ?? null
+                : data.subcategories ?? null,
         });
     };
 
@@ -157,6 +189,23 @@ const ProductPreview = () => {
             .single();
 
         if (data) setStoreType(data.store_type);
+    };
+
+    const fetchReviews = async () => {
+        if (!id) return;
+
+        try {
+            const [list, summary] = await Promise.all([
+                fetchReviewsForProduct(String(id)),
+                fetchProductRatingSummary(String(id)),
+            ]);
+            setReviews(list);
+            setRatingSummary(summary);
+        } catch (err) {
+            if (__DEV__) {
+                console.log("Fetch reviews error:", err);
+            }
+        }
     };
 
 
@@ -201,11 +250,13 @@ const ProductPreview = () => {
         fetchProduct();
         fetchVariants();
         fetchCurrentUser();
+        fetchReviews();
     }, [id]);
 
     const onRefresh = async () => {
         setRefreshing(true);
-        await Promise.all([fetchProduct(), fetchVariants()]);
+        await Promise.all([fetchProduct(), fetchVariants(), fetchReviews()]);
+        setRelatedRefreshKey((k) => k + 1);
         setRefreshing(false);
     };
 
@@ -482,10 +533,63 @@ const ProductPreview = () => {
                     <Text style={styles.productTitle}>
                         {product.name}
                     </Text>
+
+                    {(product.categories?.name ||
+                        product.subcategories?.name ||
+                        product.selected_category) && (
+                        <View style={styles.categoryRow}>
+                            {product.categories?.name ? (
+                                <View style={styles.categoryChip}>
+                                    <Text style={styles.categoryChipText}>
+                                        {product.categories.name}
+                                    </Text>
+                                </View>
+                            ) : null}
+
+                            {(product.subcategories?.name ||
+                                product.selected_category) &&
+                            product.categories?.name ? (
+                                <Text style={styles.categorySeparator}>›</Text>
+                            ) : null}
+
+                            {product.subcategories?.name ||
+                            product.selected_category ? (
+                                <View style={styles.subcategoryChip}>
+                                    <Text style={styles.subcategoryChipText}>
+                                        {product.subcategories?.name ||
+                                            product.selected_category}
+                                    </Text>
+                                </View>
+                            ) : null}
+                        </View>
+                    )}
+
+                    {ratingSummary.count > 0 && (
+                        <View style={styles.ratingWrapper}>
+                            <Text style={styles.ratingText}>
+                                {ratingSummary.average.toFixed(1)} ({ratingSummary.count})
+                            </Text>
+                            <Image
+                                source={require("@/assets/images/icons/star.png")}
+                                style={styles.ratingStar}
+                            />
+                        </View>
+                    )}
                 </View>
 
-                {/* SELLER */}
-                <View style={styles.storeWrapper}>
+                {/* SELLER — entire card opens store */}
+                <Pressable
+                    style={styles.storeWrapper}
+                    onPress={() => {
+                        if (!product.seller_id) return;
+                        router.push({
+                            pathname: "/publicProfile/[id]",
+                            params: { id: product.seller_id },
+                        });
+                    }}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Visit ${product.seller?.store_name || "store"}`}
+                >
                     <View style={styles.storeImgWrapper}>
                         <Image
                             source={
@@ -497,38 +601,26 @@ const ProductPreview = () => {
                         />
                     </View>
 
-                    <View>
+                    <View style={{ flex: 1 }}>
                         <Text style={styles.storeTitle}>
                             {product.seller?.store_name || "Unknown Seller"}
                         </Text>
 
-                        <Pressable
-                            onPress={
-                                () => {
-                                    router.push({
-                                        pathname: "/publicProfile/[id]",
-                                        params: {
-                                            id: product.seller_id
-                                        },
-                                    });
-                                }
-                            }
-                            style={styles.visitWrapper}
-                        >
+                        <View style={styles.visitWrapper}>
                             <Text style={styles.visitText}>Visit Store</Text>
                             <Image
                                 source={require('@/assets/images/icons/chevron-right.png')}
                                 style={styles.visitIcon}
                             />
-                        </Pressable>
+                        </View>
                     </View>
-                </View>
+                </Pressable>
 
                 {/* VARIANTS */}
                 <View style={styles.sizeWrapper}>
 
                     {/* COLORS */}
-                    <View style={{ flexDirection: "row", gap: 10 }}>
+                    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
                         {variants.map((v, i) => (
                             <Pressable
                                 key={v.id}
@@ -537,6 +629,7 @@ const ProductPreview = () => {
                                     padding: 10,
                                     borderWidth: activeColor === i ? 2 : 1,
                                     borderRadius: 8,
+                                    maxWidth: "100%",
                                 }}
                             >
                                 <Text>{v.color}</Text>
@@ -551,7 +644,7 @@ const ProductPreview = () => {
 
                             return (
                                 <View key={size.id} style={styles.sizeItem}>
-                                    <Text>
+                                    <Text style={styles.sizeItemIndic}>
                                         {size.size} (Stock {size.stock})
                                     </Text>
 
@@ -614,6 +707,106 @@ const ProductPreview = () => {
                     </View>
                 </View>
 
+                {/* REVIEWS */}
+                <View style={styles.deliveryWrapper}>
+                    <Text style={styles.deliveryHeadingText}>
+                        Reviews{ratingSummary.count > 0 ? ` (${ratingSummary.count})` : ""}
+                    </Text>
+
+                    {reviews.length === 0 ? (
+                        <Text style={{ fontSize: 13, color: "#888", paddingVertical: 8 }}>
+                            No reviews yet.
+                        </Text>
+                    ) : (
+                        reviews.map((review) => (
+                            <View
+                                key={review.id}
+                                style={{
+                                    paddingVertical: 12,
+                                    borderBottomWidth: 1,
+                                    borderBottomColor: "#f0f0f0",
+                                }}
+                            >
+                                <View
+                                    style={{
+                                        flexDirection: "row",
+                                        alignItems: "center",
+                                        marginBottom: 6,
+                                    }}
+                                >
+                                    <Image
+                                        source={
+                                            review.buyer?.avatar_url
+                                                ? { uri: review.buyer.avatar_url }
+                                                : require("@/assets/images/icons/default-avatar.png")
+                                        }
+                                        style={{
+                                            width: 28,
+                                            height: 28,
+                                            borderRadius: 14,
+                                            marginRight: 8,
+                                            backgroundColor: "#eee",
+                                        }}
+                                    />
+                                    <View style={{ flex: 1 }}>
+                                        <Text style={{ fontSize: 13, fontWeight: "600", color: "#111" }}>
+                                            {review.buyer?.full_name || "Buyer"}
+                                        </Text>
+                                        <View style={{ flexDirection: "row", alignItems: "center", gap: 2 }}>
+                                            {[1, 2, 3, 4, 5].map((star) => (
+                                                <Image
+                                                    key={star}
+                                                    source={require("@/assets/images/icons/star.png")}
+                                                    style={{
+                                                        width: 12,
+                                                        height: 12,
+                                                        opacity: star <= review.rating ? 1 : 0.2,
+                                                    }}
+                                                />
+                                            ))}
+                                        </View>
+                                    </View>
+                                    <Text style={{ fontSize: 11, color: "#999" }}>
+                                        {new Date(review.created_at).toLocaleDateString()}
+                                    </Text>
+                                </View>
+
+                                {!!review.comment && (
+                                    <Text style={{ fontSize: 13, color: "#444", lineHeight: 19 }}>
+                                        {review.comment}
+                                    </Text>
+                                )}
+
+                                {review.image_urls?.length > 0 && (
+                                    <ScrollView
+                                        horizontal
+                                        showsHorizontalScrollIndicator={false}
+                                        style={{ marginTop: 8 }}
+                                        contentContainerStyle={{ gap: 8 }}
+                                    >
+                                        {review.image_urls.map((url, idx) => (
+                                            <Pressable
+                                                key={`${review.id}-${idx}`}
+                                                onPress={() => setReviewImagePreview(url)}
+                                            >
+                                                <Image
+                                                    source={{ uri: url }}
+                                                    style={{
+                                                        width: 64,
+                                                        height: 64,
+                                                        borderRadius: 8,
+                                                        backgroundColor: "#eee",
+                                                    }}
+                                                />
+                                            </Pressable>
+                                        ))}
+                                    </ScrollView>
+                                )}
+                            </View>
+                        ))
+                    )}
+                </View>
+
 
                 <View style={{ paddingVertical: 15, paddingHorizontal: 15, }}>
                     <Pressable
@@ -634,6 +827,12 @@ const ProductPreview = () => {
                         <Text style={{ fontSize: 12, }}>Report an issue!</Text>
                     </Pressable>
                 </View>
+
+                <RelatedProductsSection
+                    productId={String(product.id)}
+                    categoryId={product.category_id}
+                    refreshKey={relatedRefreshKey}
+                />
 
             </ScrollView >
 
@@ -773,6 +972,32 @@ const ProductPreview = () => {
                         activeIndex={galleryIndex}
                         containerStyle={styles.galleryDotsContainer}
                     />
+                </View>
+            </Modal>
+
+            <Modal
+                visible={!!reviewImagePreview}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setReviewImagePreview(null)}
+            >
+                <View style={styles.galleryOverlay}>
+                    <Pressable
+                        style={[
+                            styles.galleryCloseBtn,
+                            { top: insets.top + 12 },
+                        ]}
+                        onPress={() => setReviewImagePreview(null)}
+                    >
+                        <Feather name="x" size={24} color="#ffffff" />
+                    </Pressable>
+                    {reviewImagePreview ? (
+                        <Image
+                            source={{ uri: reviewImagePreview }}
+                            style={styles.galleryImage}
+                            resizeMode="contain"
+                        />
+                    ) : null}
                 </View>
             </Modal>
 

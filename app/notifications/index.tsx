@@ -167,6 +167,11 @@ const Notifications = () => {
 
         if (!item.order_id) return
 
+        if (item.type === 'order_review_request') {
+            router.push(`/review/${item.order_id}`)
+            return
+        }
+
         // 🧠 ROUTING BASED ON STORE TYPE
         if (storeType === 'wholesale') {
             router.push(`/sales/${item.order_id}`)
