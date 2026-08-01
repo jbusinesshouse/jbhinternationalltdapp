@@ -49,37 +49,21 @@ jobs:
 
       # ✅ Decode keystore into the newly generated directory paths
       - name: Decode keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          MYAPP_UPLOAD_STORE_PASSWORD: ${{ secrets.MYAPP_UPLOAD_STORE_PASSWORD }}
         run: |
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > android/app/upload-keystore.jks
-
-      # ✅ Verify keystore exists
-      - name: Verify keystore exists
-        run: ls -la android/app/upload-keystore.jks
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > android/app/upload-keystore.jks
+          ls -la android/app/upload-keystore.jks
+          # Fail early if this is not the Play upload key
+          FINGERPRINT=$(keytool -list -v -keystore android/app/upload-keystore.jks -storepass "$MYAPP_UPLOAD_STORE_PASSWORD" | grep -m1 'SHA1:' | awk '{print $2}')
+          echo "Keystore SHA1: $FINGERPRINT"
+          test "$FINGERPRINT" = "82:77:BE:A8:16:A9:5E:D4:CD:39:19:FB:8C:6E:BC:94:7E:76:08:08"
 
       # 📝 ✅ Auto-inject the release signing configurations into the generated build.gradle file
       - name: Inject Release Signing Configuration
-        run: |
-          node -e "
-          const fs = require('fs');
-          const filePath = 'android/app/build.gradle';
-          let content = fs.readFileSync(filePath, 'utf8');
-          
-          const releaseSigningConfigs = \`
-                  release {
-                      storeFile file('upload-keystore.jks')
-                      storePassword System.getenv('MYAPP_UPLOAD_STORE_PASSWORD')
-                      keyAlias System.getenv('MYAPP_UPLOAD_KEY_ALIAS')
-                      keyPassword System.getenv('MYAPP_UPLOAD_KEY_PASSWORD')
-                  }
-          \`;
-          
-          // Inject signing configs details directly into signingConfigs block
-          content = content.replace('signingConfigs {', 'signingConfigs {' + releaseSigningConfigs);
-          // Overwrite build types configuration to sign release builds using the release keystore profile
-          content = content.replace('signingConfig signingConfigs.debug', 'signingConfig signingConfigs.release');
-          
-          fs.writeFileSync(filePath, content, 'utf8');
-          "
+        run: node scripts/inject-release-signing.js
+
 
       # ✅ Debug which Node Gradle will use (remove after confirming fix)
       - name: Debug Node path
