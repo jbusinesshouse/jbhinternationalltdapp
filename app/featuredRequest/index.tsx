@@ -119,6 +119,7 @@ const FeaturedRequest = () => {
         console.warn("[FeaturedRequest] submit failed:", err);
       }
 
+      
       // Partial unique index on pending → Postgres 23505
       if (err?.code === "23505") {
         Alert.alert(
