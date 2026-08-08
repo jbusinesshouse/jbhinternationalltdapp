@@ -1,4 +1,5 @@
 import RichTextEditor from '@/components/textEditor/RichTextEditor';
+import { showAppAlert } from '@/context/AppAlertContext';
 import { useUser } from '@/context/UserContext';
 import {
     parsePositiveInt,
@@ -17,7 +18,6 @@ import { useLocalSearchParams, useNavigation } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
 import {
     ActivityIndicator,
-    Alert,
     Image,
     Pressable,
     ScrollView,
@@ -160,7 +160,7 @@ const EditProduct = () => {
                 .single();
 
             if (productError || !product) {
-                Alert.alert('Error', 'Failed to load product');
+                showAppAlert('সমস্যা', 'প্রোডাক্ট লোড করা যায়নি।');
                 navigation.goBack();
                 return;
             }
@@ -221,7 +221,7 @@ const EditProduct = () => {
             }
 
         } catch (err) {
-            Alert.alert('Error', 'Unexpected error: ' + String(err));
+            showAppAlert('সমস্যা', 'অপ্রত্যাশিত সমস্যা হয়েছে: ' + String(err));
         } finally {
             setLoading(false);
         }
@@ -242,7 +242,7 @@ const EditProduct = () => {
     const pickAdditionalImages = async () => {
         const remaining = MAX_ADDITIONAL_IMAGES - images.length;
         if (remaining <= 0) {
-            Alert.alert('Limit reached', `You can add up to ${MAX_ADDITIONAL_IMAGES} additional images.`);
+            showAppAlert('সীমা পূর্ণ', `আপনি সর্বোচ্চ ${MAX_ADDITIONAL_IMAGES}টি অতিরিক্ত ছবি যোগ করতে পারবেন।`);
             return;
         }
 
@@ -292,10 +292,10 @@ const EditProduct = () => {
     };
 
     const removeColorVariant = (index: number) => {
-        Alert.alert('Remove Variant', 'Delete this color and its sizes?', [
-            { text: 'Cancel', style: 'cancel' },
+        showAppAlert('ভ্যারিয়েন্ট ডিলিট করবেন?', 'এই রঙ ও এর সাইজগুলো ডিলিট হয়ে যাবে।', [
+            { text: 'বাতিল', style: 'cancel' },
             {
-                text: 'Delete', style: 'destructive', onPress: () => {
+                text: 'ডিলিট করুন', style: 'destructive', onPress: () => {
                     const v = variants[index];
                     if (v.db_variant_id) {
                         setRemovedVariantIds(prev => [...prev, v.db_variant_id!]);
@@ -334,32 +334,38 @@ const EditProduct = () => {
     };
 
     const validateForm = (): string | null => {
-        if (!profile) return 'Profile is still loading. Please try again.';
+        if (!profile) return 'প্রোফাইল লোড হচ্ছে। একটু পর আবার চেষ্টা করুন।';
         if (accountBlocked) {
-            return `Your account is currently ${profile.status === 'freeze' ? 'frozen' : profile.status}. You cannot edit products.`;
+            const statusBn =
+                profile.status === 'freeze'
+                    ? 'স্থগিত'
+                    : profile.status === 'restricted'
+                      ? 'সীমিত'
+                      : profile.status;
+            return `আপনার অ্যাকাউন্ট এখন ${statusBn}। প্রোডাক্ট এডিট করা যাবে না।`;
         }
-        if (!mainImage) return 'Please upload a main image';
-        if (!name.trim()) return 'Please enter product name';
-        if (!parentCategoryId) return 'Please select a target category';
-        if (!subCategoryId || !category.trim()) return 'Please select a specific category';
-        if (parsePositiveNumber(price) == null) return 'Please enter a valid price';
-        if (parsePositiveInt(moq) == null) return 'Please enter a valid MOQ';
-        if (plainTextFromHtml(description).length === 0) return 'Please enter product description';
-        if (variants.length === 0) return 'Please add at least one color variant';
+        if (!mainImage) return 'প্রধান ছবি আপলোড করুন।';
+        if (!name.trim()) return 'প্রোডাক্টের নাম লিখুন।';
+        if (!parentCategoryId) return 'মূল ক্যাটাগরি বাছুন।';
+        if (!subCategoryId || !category.trim()) return 'নির্দিষ্ট ক্যাটাগরি বাছুন।';
+        if (parsePositiveNumber(price) == null) return 'সঠিক দাম লিখুন।';
+        if (parsePositiveInt(moq) == null) return 'সঠিক ন্যূনতম অর্ডার পরিমাণ (MOQ) লিখুন।';
+        if (plainTextFromHtml(description).length === 0) return 'প্রোডাক্টের বিবরণ লিখুন।';
+        if (variants.length === 0) return 'অন্তত একটি রঙের ভ্যারিয়েন্ট যোগ করুন।';
 
         const colorKeys = new Set<string>();
         for (let i = 0; i < variants.length; i++) {
             const v = variants[i];
-            if (!v.color.trim()) return `Please enter color name for variant ${i + 1}`;
+            if (!v.color.trim()) return `ভ্যারিয়েন্ট ${i + 1} এর রঙের নাম লিখুন।`;
             const colorKey = v.color.trim().toLowerCase();
             if (colorKeys.has(colorKey)) {
-                return `Duplicate color "${v.color.trim()}". Each color must be unique.`;
+                return 'একই রঙ দুবার দেওয়া যায় না। প্রতিটি রঙ আলাদা হতে হবে।';
             }
             colorKeys.add(colorKey);
-            if (v.sizes.length === 0) return `Please select at least one size for ${v.color}`;
+            if (v.sizes.length === 0) return `${v.color} এর জন্য অন্তত একটি সাইজ বাছুন।`;
             for (const s of v.sizes) {
                 if (parsePositiveInt(s.stock) == null) {
-                    return `Please enter valid stock for ${v.color} - ${s.label}`;
+                    return `${v.color} - ${s.label} এর স্টক সঠিকভাবে লিখুন।`;
                 }
             }
         }
@@ -369,7 +375,7 @@ const EditProduct = () => {
     const handleSubmit = async () => {
         const validationError = validateForm();
         if (validationError) {
-            Alert.alert('Validation Error', validationError);
+            showAppAlert('যাচাই ব্যর্থ', validationError);
             return;
         }
 
@@ -394,7 +400,7 @@ const EditProduct = () => {
                 .eq('id', id);
 
             if (productError) {
-                Alert.alert('Error', 'Failed to update product: ' + productError.message);
+                showAppAlert('সমস্যা', 'প্রোডাক্ট আপডেট হয়নি: ' + productError.message);
                 return;
             }
 
@@ -591,17 +597,17 @@ const EditProduct = () => {
                 }
             }
 
-            Alert.alert('Success', 'Product updated successfully!', [
-                { text: 'OK', onPress: () => navigation.goBack() }
+            showAppAlert('সফল', 'প্রোডাক্ট আপডেট হয়েছে।', [
+                { text: 'ঠিক আছে', onPress: () => navigation.goBack() }
             ]);
 
         } catch (err) {
             if (newlyUploadedPaths.length) {
                 await removeProductStoragePaths(newlyUploadedPaths);
             }
-            Alert.alert(
-                'Error',
-                err instanceof Error ? err.message : 'Unexpected error: ' + String(err)
+            showAppAlert(
+                'সমস্যা',
+                err instanceof Error ? err.message : 'অপ্রত্যাশিত সমস্যা হয়েছে: ' + String(err)
             );
         } finally {
             setIsSubmitting(false);

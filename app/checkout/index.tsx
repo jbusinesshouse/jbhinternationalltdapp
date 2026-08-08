@@ -2,6 +2,7 @@ import DeliveryAddressFormFields, {
     AddressFormValues,
     emptyAddressForm,
 } from "@/components/delivery/DeliveryAddressFormFields";
+import { showAppAlert } from "@/context/AppAlertContext";
 import { useProfile } from "@/hooks/useProfile";
 import {
     createDeliveryAddress,
@@ -18,7 +19,6 @@ import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
 import {
     ActivityIndicator,
-    Alert,
     Image,
     Pressable,
     ScrollView,
@@ -236,26 +236,26 @@ const Checkout = () => {
 
     const handleSubmit = async () => {
         if (!form.full_name || !form.phone) {
-            Alert.alert("Missing Info", "Please fill required contact fields");
+            showAppAlert("তথ্য অসম্পূর্ণ", "যোগাযোগের প্রয়োজনীয় তথ্য পূরণ করুন।");
             return;
         }
 
         const delivery = resolveDeliverySnapshot();
         if (!delivery) {
             if (addressMode === "store") {
-                Alert.alert(
-                    "Missing Store Address",
-                    "Your store address is incomplete. Choose another delivery option or update your profile."
+                showAppAlert(
+                    "দোকানের ঠিকানা নেই",
+                    "আপনার প্রোফাইলে দোকানের ঠিকানা সম্পূর্ণ নয়।"
                 );
             } else if (addressMode === "saved") {
-                Alert.alert(
-                    "Select Address",
-                    "Please select a saved delivery address, or add a new one."
+                showAppAlert(
+                    "ঠিকানা বাছুন",
+                    "ডেলিভারির জন্য একটি সংরক্ষিত ঠিকানা বেছে নিন।"
                 );
             } else {
-                Alert.alert(
-                    "Missing Info",
-                    "Please fill district and address for the custom delivery location."
+                showAppAlert(
+                    "তথ্য অসম্পূর্ণ",
+                    "জেলা ও ঠিকানা পূরণ করুন।"
                 );
             }
             return;
@@ -270,7 +270,7 @@ const Checkout = () => {
             } = await supabase.auth.getUser();
 
             if (userError || !user) {
-                Alert.alert("Error", "You are not logged in");
+                showAppAlert("সাইন ইন প্রয়োজন", "অর্ডার করতে আগে সাইন ইন করুন।");
                 return;
             }
 
@@ -339,13 +339,13 @@ const Checkout = () => {
                 orderId
             );
 
-            Alert.alert("Success", "Order placed successfully");
+            showAppAlert("সফল", "আপনার অর্ডার সফলভাবে প্লেস হয়েছে।");
             router.replace("/");
         } catch (err: any) {
             if (__DEV__) {
                 console.log(err);
             }
-            Alert.alert("Error", err.message || "Failed to place order");
+            showAppAlert("সমস্যা", err.message || "অর্ডার প্লেস করা যায়নি।");
         } finally {
             setLoading(false);
         }
@@ -464,15 +464,15 @@ const Checkout = () => {
                                                     null
                                                 );
                                                 setDefaultDeliveryAddressId(null);
-                                                Alert.alert(
-                                                    "Saved",
-                                                    "Store address is now your default delivery address."
+                                                showAppAlert(
+                                                    "সংরক্ষিত",
+                                                    "দোকানের ঠিকানা এখন ডিফল্ট ডেলিভারি ঠিকানা।"
                                                 );
                                             } catch (e: any) {
-                                                Alert.alert(
-                                                    "Error",
+                                                showAppAlert(
+                                                    "সমস্যা",
                                                     e?.message ||
-                                                        "Could not update default"
+                                                        "ডিফল্ট ঠিকানা আপডেট করা যায়নি।"
                                                 );
                                             }
                                         }}
@@ -559,10 +559,10 @@ const Checkout = () => {
                                                             addr.id
                                                         );
                                                     } catch (e: any) {
-                                                        Alert.alert(
-                                                            "Error",
+                                                        showAppAlert(
+                                                            "সমস্যা",
                                                             e?.message ||
-                                                                "Could not update default"
+                                                                "ডিফল্ট ঠিকানা আপডেট করা যায়নি।"
                                                         );
                                                     }
                                                 }}

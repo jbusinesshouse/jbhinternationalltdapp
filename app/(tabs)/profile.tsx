@@ -1,4 +1,5 @@
 import ConfirmModal from '@/components/modal/ConfirmModal'
+import { showAppAlert } from '@/context/AppAlertContext'
 import { useUser } from '@/context/UserContext'
 import { useAuth } from '@/hooks/useAuth'
 import { useProfile } from '@/hooks/useProfile'
@@ -11,7 +12,6 @@ import { type Href, useNavigation, useRouter } from 'expo-router'
 import React, { useMemo, useState } from 'react'
 import {
     ActivityIndicator,
-    Alert,
     Image,
     Linking,
     Pressable,
@@ -122,7 +122,7 @@ const IncompleteProfile = ({ onSaved }: { onSaved: () => void }) => {
         const { full_name, phone, store_name, store_type, address, district, upazila } = form
 
         if (!full_name || !phone || !store_name || !address || !district || !upazila) {
-            Alert.alert('Missing Info', 'Please fill all required fields')
+            showAppAlert('তথ্য অসম্পূর্ণ', 'অনুগ্রহ করে সব প্রয়োজনীয় ঘর পূরণ করুন।')
             return
         }
 
@@ -146,10 +146,10 @@ const IncompleteProfile = ({ onSaved }: { onSaved: () => void }) => {
 
             if (error) throw error
 
-            Alert.alert('Success', 'Profile completed!')
+            showAppAlert('সফল', 'প্রোফাইল সম্পন্ন হয়েছে!')
             onSaved()
         } catch (err: any) {
-            Alert.alert('Error', err.message || 'Failed to save profile')
+            showAppAlert('সমস্যা', err.message || 'প্রোফাইল সেভ করা যায়নি।')
         } finally {
             setSaving(false)
         }
@@ -400,7 +400,7 @@ const Profile = () => {
             if (__DEV__) {
                 console.error('Avatar update failed:', err)
             }
-            alert('Failed to update profile image')
+            showAppAlert('সমস্যা', 'প্রোফাইল ছবি আপডেট করা যায়নি।')
         } finally {
             setSaving(false)
         }
@@ -581,10 +581,10 @@ const Profile = () => {
             {/* 🔹 MODALS */}
             <ConfirmModal
                 visible={showCloseModal}
-                title="Close Account"
-                description="Are you sure you want to close your account? You will be redirected to submit an appeal request."
-                confirmText="Proceed"
-                cancelText="Cancel"
+                title="অ্যাকাউন্ট বন্ধ"
+                description="আপনি কি সত্যিই অ্যাকাউন্ট বন্ধ করতে চান? আপনাকে অ্যাপিলে অনুরোধ জমা দিতে নিয়ে যাওয়া হবে।"
+                confirmText="এগিয়ে যান"
+                cancelText="বাতিল"
                 danger
                 onCancel={() => setShowCloseModal(false)}
                 onConfirm={() => {
@@ -595,10 +595,10 @@ const Profile = () => {
 
             <ConfirmModal
                 visible={showSignoutModal}
-                title="Sign out"
-                description="Are you sure you want to sign out of your account?"
-                confirmText="Sign out"
-                cancelText="Cancel"
+                title="সাইন আউট"
+                description="আপনি কি অ্যাকাউন্ট থেকে সাইন আউট করতে চান?"
+                confirmText="সাইন আউট"
+                cancelText="বাতিল"
                 onCancel={() => setShowSignoutModal(false)}
                 onConfirm={() => {
                     setShowSignoutModal(false)

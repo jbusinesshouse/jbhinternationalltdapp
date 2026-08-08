@@ -1,4 +1,5 @@
 import ConfirmModal from "@/components/modal/ConfirmModal";
+import { showAppAlert } from "@/context/AppAlertContext";
 import {
   AD_DURATION_DAYS,
   AD_PACKAGES,
@@ -15,7 +16,6 @@ import { useNavigation } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Image,
   Pressable,
   ScrollView,
@@ -94,7 +94,7 @@ const AdvertiseProduct = () => {
       if (__DEV__) {
         console.warn("[AdvertiseProduct] load failed:", err);
       }
-      Alert.alert(
+      showAppAlert(
         "সমস্যা",
         err?.message || "অ্যাডভারটাইজ স্ট্যাটাস লোড করা যায়নি। আবার চেষ্টা করুন।"
       );
@@ -124,7 +124,7 @@ const AdvertiseProduct = () => {
 
   const handleSubmit = async () => {
     if (!selectedIds.length) {
-      Alert.alert(
+      showAppAlert(
         "প্রোডাক্ট বাছুন",
         "অ্যাডভারটাইজ করার জন্য কমপক্ষে একটি প্রোডাক্ট সিলেক্ট করুন।"
       );
@@ -157,7 +157,7 @@ const AdvertiseProduct = () => {
       }
 
       if (err?.code === "23505") {
-        Alert.alert(
+        showAppAlert(
           "অনুরোধ অপেক্ষমাণ",
           "আপনার ইতিমধ্যে একটি পেন্ডিং অ্যাডভারটাইজ অনুরোধ আছে।"
         );
@@ -165,7 +165,7 @@ const AdvertiseProduct = () => {
         return;
       }
 
-      Alert.alert(
+      showAppAlert(
         "সমস্যা",
         err?.message || "কিছু সমস্যা হয়েছে। আবার চেষ্টা করুন।"
       );
@@ -414,7 +414,7 @@ const AdvertiseProduct = () => {
         visible={showSuccessModal}
         title="অনুরোধ জমা হয়েছে"
         description="ধন্যবাদ। আমাদের টিম রিভিউ করে ফোন করে নিশ্চিত করবে।"
-        confirmText="OK"
+        confirmText="ঠিক আছে"
         cancelText={null}
         onConfirm={handleSuccessClose}
       />

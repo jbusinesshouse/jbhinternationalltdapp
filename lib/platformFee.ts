@@ -3,15 +3,15 @@ import { supabase } from "@/lib/supabase";
 /** 2% of completed sales */
 export const PLATFORM_FEE_RATE = 0.02;
 /** Max outstanding due shown / expected in one go */
-export const PLATFORM_FEE_MAX_DUE = 1500;
+export const PLATFORM_FEE_MAX_DUE = 1000;
 /** Yellow warning threshold on outstanding */
-export const PLATFORM_FEE_WARN_AT = 1300;
+export const PLATFORM_FEE_WARN_AT = 800;
 
 /**
  * Personal bKash number sellers Send Money to.
  * Replace with your real number before production.
  */
-export const PLATFORM_BKASH_NUMBER = "01711223344";
+export const PLATFORM_BKASH_NUMBER = "01950863414";
 
 /** @deprecated use PLATFORM_BKASH_NUMBER */
 export const PLATFORM_BKASH_MERCHANT = PLATFORM_BKASH_NUMBER;
@@ -35,7 +35,7 @@ export type PlatformFeePayment = {
  * - approvedPaid  = sum of approved proofs
  * - pendingPaid   = sum of pending proofs (not counted as paid yet)
  * - balance       = feeFromSales − approvedPaid
- * - outstanding   = min(max(balance, 0), 1500)  (what they should pay now)
+ * - outstanding   = min(max(balance, 0), 1000)  (what they should pay now)
  */
 export type PlatformFeeSummary = {
   salesTotal: number;
@@ -45,9 +45,9 @@ export type PlatformFeeSummary = {
   approvedPaid: number;
   /** Pending proofs (awaiting manual review) */
   pendingPaid: number;
-  /** feeFromSales − approvedPaid (can exceed the 1500 cap) */
+  /** feeFromSales − approvedPaid (can exceed the 1000 cap) */
   balance: number;
-  /** Amount due now (capped at 1500) */
+  /** Amount due now (capped at 1000) */
   outstanding: number;
   /** How much of feeFromSales is above the current due cap */
   deferredBeyondCap: number;
@@ -62,6 +62,33 @@ export function getFeeAlertLevel(outstanding: number): FeeAlertLevel {
   if (outstanding >= PLATFORM_FEE_MAX_DUE) return "critical";
   if (outstanding >= PLATFORM_FEE_WARN_AT) return "warn";
   return "ok";
+}
+
+/** Popup / banner copy when due is near or at the 1000 BDT cap. */
+export function getFeeDueAlertCopy(summary: {
+  outstanding: number;
+  deferredBeyondCap?: number;
+}): { level: "warn" | "critical"; title: string; body: string } | null {
+  const level = getFeeAlertLevel(summary.outstanding);
+  if (level !== "warn" && level !== "critical") return null;
+
+  if (level === "critical") {
+    const extra =
+      (summary.deferredBeyondCap ?? 0) > 0
+        ? ` এছাড়াও আরও ${formatBdt(summary.deferredBeyondCap!)} ফি জমে আছে।`
+        : "";
+    return {
+      level,
+      title: "জরুরি: প্ল্যাটফর্ম ফি বকেয়া",
+      body: `আপনার বকেয়া ${formatBdt(summary.outstanding)} (সর্বোচ্চ সীমা ${formatBdt(PLATFORM_FEE_MAX_DUE)})। দয়া করে দ্রুত Hub থেকে bKash-এ পরিশোধ করুন।${extra}`,
+    };
+  }
+
+  return {
+    level,
+    title: "সতর্কতা: পেমেন্ট শীঘ্রই বাকি",
+    body: `আপনার বকেয়া ${formatBdt(summary.outstanding)}। ${formatBdt(PLATFORM_FEE_WARN_AT)} ছুঁয়ে গেছে — সীমা ${formatBdt(PLATFORM_FEE_MAX_DUE)} এর আগে Hub থেকে পরিশোধ করুন।`,
+  };
 }
 
 export function formatBdt(amount: number): string {

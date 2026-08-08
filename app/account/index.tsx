@@ -1,4 +1,5 @@
 import DeliveryAddressSection from '@/components/delivery/DeliveryAddressSection'
+import ConfirmModal from '@/components/modal/ConfirmModal'
 import StoreProductSearch, {
     useStoreProductSearch,
 } from '@/components/StoreProductSearch'
@@ -10,7 +11,6 @@ import React, { useEffect, useMemo, useState } from 'react'
 import {
     ActivityIndicator,
     Image,
-    Modal,
     Pressable,
     ScrollView,
     StyleSheet,
@@ -353,30 +353,20 @@ const Account = () => {
 
             </ScrollView>
 
-            {/* MODAL */}
-            <Modal visible={modalVisible} transparent animationType="fade">
-                <View style={s.modalBg}>
-                    <View style={s.modalBox}>
-
-                        <Text style={s.modalTitle}>Confirm {actionType}</Text>
-
-                        <Text style={s.modalText}>
-                            Are you sure you want to {actionType} this product?
-                        </Text>
-
-                        <View style={s.modalRow}>
-                            <Pressable style={s.cancelBtn} onPress={() => setModalVisible(false)}>
-                                <Text>Cancel</Text>
-                            </Pressable>
-
-                            <Pressable style={s.confirmBtn} onPress={confirmAction}>
-                                <Text style={{ color: '#fff' }}>Confirm</Text>
-                            </Pressable>
-                        </View>
-
-                    </View>
-                </View>
-            </Modal>
+            <ConfirmModal
+                visible={modalVisible}
+                title={actionType === 'delete' ? 'ডিলিট করবেন?' : 'এডিট নিশ্চিত?'}
+                description={
+                    actionType === 'delete'
+                        ? 'আপনি কি এই প্রোডাক্ট ডিলিট করতে চান?'
+                        : 'আপনি কি এই প্রোডাক্ট এডিট করতে চান?'
+                }
+                confirmText={actionType === 'delete' ? 'ডিলিট করুন' : 'এগিয়ে যান'}
+                cancelText="বাতিল"
+                danger={actionType === 'delete'}
+                onConfirm={confirmAction}
+                onCancel={() => setModalVisible(false)}
+            />
 
         </View>
     )
@@ -665,51 +655,6 @@ const s = StyleSheet.create({
         fontSize: 13,
         fontWeight: '600',
     },
-
-    modalBg: {
-        flex: 1,
-        backgroundColor: 'rgba(0,0,0,0.4)',
-        justifyContent: 'center',
-        padding: 20
-    },
-
-    modalBox: {
-        backgroundColor: '#fff',
-        padding: 20,
-        borderRadius: 12
-    },
-
-    modalTitle: {
-        fontSize: 16,
-        fontWeight: '600'
-    },
-
-    modalText: {
-        marginTop: 10,
-        color: '#555'
-    },
-
-    modalRow: {
-        flexDirection: 'row',
-        marginTop: 20,
-        gap: 10
-    },
-
-    cancelBtn: {
-        flex: 1,
-        padding: 10,
-        backgroundColor: '#eee',
-        borderRadius: 8,
-        alignItems: 'center'
-    },
-
-    confirmBtn: {
-        flex: 1,
-        padding: 10,
-        backgroundColor: '#111',
-        borderRadius: 8,
-        alignItems: 'center'
-    }
 })
 
 export default Account

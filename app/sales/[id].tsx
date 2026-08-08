@@ -1,12 +1,12 @@
+import ConfirmModal from '@/components/modal/ConfirmModal'
+import { showAppAlert } from '@/context/AppAlertContext'
 import { supabase } from '@/lib/supabase'
 import { styles } from '@/styles/profile'
 import { useLocalSearchParams, useNavigation } from 'expo-router'
 import React, { useEffect, useState } from 'react'
 import {
     ActivityIndicator,
-    Alert,
     Image,
-    Modal,
     Pressable,
     ScrollView,
     StyleSheet,
@@ -98,9 +98,9 @@ const SalesDetails = () => {
             if (existingError) throw existingError
 
             if (existing && existing.length > 0) {
-                Alert.alert(
-                    'Already Sent',
-                    'A cancellation request has already been sent for this order.'
+                showAppAlert(
+                    'ইতিমধ্যে পাঠানো',
+                    'এই অর্ডারের জন্য বাতিলের অনুরোধ আগেই পাঠানো হয়েছে।'
                 )
                 return
             }
@@ -120,15 +120,15 @@ const SalesDetails = () => {
 
             if (error) throw error
 
-            Alert.alert(
-                'Request Sent',
-                'Cancellation request has been sent to the buyer.'
+            showAppAlert(
+                'অনুরোধ পাঠানো হয়েছে',
+                'ক্রেতাকে বাতিলের অনুরোধ পাঠানো হয়েছে।'
             )
         } catch (err) {
             if (__DEV__) {
                 console.log(err)
             }
-            Alert.alert('Error', 'Failed to send cancellation request.')
+            showAppAlert('সমস্যা', 'বাতিলের অনুরোধ পাঠানো যায়নি।')
         } finally {
             setUpdating(false)
             setModalVisible(false)
@@ -177,6 +177,7 @@ const SalesDetails = () => {
 
     const confirmUpdate = async (statusToApply: string) => {
         if (!order || !statusToApply) return
+        if (updating) return
         if (order.status?.toLowerCase() === 'hold') return
 
         if (statusToApply === 'cancelled') {
@@ -360,36 +361,23 @@ const SalesDetails = () => {
 
             </ScrollView>
 
-            {/* MODAL */}
-            <Modal visible={modalVisible} transparent animationType="fade">
-                <View style={s.modalBg}>
-                    <View style={s.modalBox}>
-                        <Text style={s.titleText}>Confirm Status Update</Text>
-
-                        <Text style={s.subText}>
-                            {pendingStatus === 'cancelled'
-                                ? 'Send a cancellation request to the buyer?'
-                                : `Change status to "${pendingStatus}"?`}
-                        </Text>
-
-                        <View style={s.modalBtnRow}>
-                            <Pressable style={s.cancelBtn} onPress={() => setModalVisible(false)}>
-                                <Text>Cancel</Text>
-                            </Pressable>
-
-                            <Pressable
-                                style={s.confirmBtn}
-                                onPress={() => confirmUpdate(pendingStatus!)}
-                                disabled={updating}
-                            >
-                                <Text style={{ color: '#fff' }}>
-                                    {updating ? 'Updating...' : 'Confirm'}
-                                </Text>
-                            </Pressable>
-                        </View>
-                    </View>
-                </View>
-            </Modal>
+            <ConfirmModal
+                visible={modalVisible}
+                title="স্ট্যাটাস আপডেট"
+                description={
+                    pendingStatus === 'cancelled'
+                        ? 'ক্রেতাকে বাতিলের অনুরোধ পাঠাবেন?'
+                        : `স্ট্যাটাস "${pendingStatus}" এ পরিবর্তন করবেন?`
+                }
+                confirmText={updating ? 'আপডেট হচ্ছে...' : 'নিশ্চিত'}
+                cancelText="বাতিল"
+                onConfirm={() => confirmUpdate(pendingStatus!)}
+                onCancel={() => {
+                    if (updating) return
+                    setModalVisible(false)
+                    setPendingStatus(null)
+                }}
+            />
 
         </View>
     )
@@ -475,37 +463,6 @@ const s = StyleSheet.create({
     activeBtn: { backgroundColor: '#111' },
 
     dangerBtn: { backgroundColor: '#ef4444' },
-
-    modalBg: {
-        flex: 1,
-        backgroundColor: 'rgba(0,0,0,0.4)',
-        justifyContent: 'center',
-        padding: 20
-    },
-
-    modalBox: {
-        backgroundColor: '#fff',
-        padding: 20,
-        borderRadius: 12
-    },
-
-    modalBtnRow: { flexDirection: 'row', marginTop: 20, gap: 10 },
-
-    cancelBtn: {
-        flex: 1,
-        padding: 10,
-        backgroundColor: '#eee',
-        borderRadius: 8,
-        alignItems: 'center'
-    },
-
-    confirmBtn: {
-        flex: 1,
-        padding: 10,
-        backgroundColor: '#111',
-        borderRadius: 8,
-        alignItems: 'center'
-    },
 
     labelText: { fontSize: 11, opacity: 0.5 },
 

@@ -1,5 +1,6 @@
 import HtmlRender from "@/components/htmlRender/HtmlRenter";
 import RelatedProductsSection from "@/components/product/RelatedProductsSection";
+import { showAppAlert } from "@/context/AppAlertContext";
 import { useUser } from "@/context/UserContext";
 import { findOrCreateChatRoom } from "@/lib/chat";
 import {
@@ -14,7 +15,6 @@ import { router, useLocalSearchParams, useNavigation } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import {
     ActivityIndicator,
-    Alert,
     Image,
     Modal,
     NativeScrollEvent,
@@ -399,12 +399,12 @@ const ProductPreview = () => {
 
     const handleTextSeller = async () => {
         if (!product || !user) {
-            Alert.alert('Sign in required', 'Please sign in to message the seller.');
+            showAppAlert('সাইন ইন প্রয়োজন', 'বিক্রেতাকে মেসেজ করতে সাইন ইন করুন।');
             return;
         }
 
         if (user.id === product.seller_id) {
-            Alert.alert('Unavailable', 'You cannot message yourself about your own product.');
+            showAppAlert('করা যাবে না', 'নিজের প্রোডাক্ট নিয়ে নিজেকে মেসেজ করা যায় না।');
             return;
         }
 
@@ -429,7 +429,7 @@ const ProductPreview = () => {
         setTextSellerLoading(false);
 
         if ('error' in result) {
-            Alert.alert('Could not start chat', result.error);
+            showAppAlert('চ্যাট শুরু হয়নি', result.error);
             return;
         }
 
@@ -868,7 +868,16 @@ const ProductPreview = () => {
                     onPress={() => {
                         // 0. Double check status in onPress (Safety check)
                         if (profile?.status && profile.status !== 'active') {
-                            alert(`Your account is ${profile.status}. You cannot place orders at this time.`);
+                            const statusBn =
+                                profile.status === 'freeze'
+                                    ? 'স্থগিত'
+                                    : profile.status === 'restricted'
+                                      ? 'সীমিত'
+                                      : profile.status;
+                            showAppAlert(
+                                'সমস্যা',
+                                `আপনার অ্যাকাউন্ট ${statusBn} অবস্থায় আছে। এখন অর্ডার করা যাবে না।`
+                            );
                             return;
                         }
 
@@ -879,13 +888,16 @@ const ProductPreview = () => {
 
                         // 2. Handle Case: No items selected
                         if (totalQty === 0) {
-                            alert("Please select at least one item");
+                            showAppAlert('সমস্যা', 'অন্তত একটি আইটেম বাছুন।');
                             return;
                         }
 
                         // 3. Handle Case: Below Minimum Order Amount
                         if (totalQty < product.moq) {
-                            alert(`Minimum order amount not reached. You need at least ${product.moq} pieces to proceed.`);
+                            showAppAlert(
+                                'ন্যূনতম অর্ডার পূরণ হয়নি',
+                                `অন্তত ${product.moq} পিস নিতে হবে।`
+                            );
                             return;
                         }
 

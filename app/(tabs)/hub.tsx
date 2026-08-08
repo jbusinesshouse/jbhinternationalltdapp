@@ -1,4 +1,5 @@
 import ConfirmModal from "@/components/modal/ConfirmModal";
+import { showAppAlert } from "@/context/AppAlertContext";
 import { useProfile } from "@/hooks/useProfile";
 import {
   PLATFORM_BKASH_NUMBER,
@@ -9,13 +10,13 @@ import {
   fetchPlatformFeeSummary,
   formatBdt,
   getFeeAlertLevel,
+  getFeeDueAlertCopy,
   submitPlatformFeePayment,
 } from "@/lib/platformFee";
 import { router } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -106,20 +107,17 @@ function WholesaleHub({ profileId }: { profileId: string }) {
         body: "আপনার প্ল্যাটফর্ম ফি পরিশোধিত আছে। ধন্যবাদ!",
       };
     }
-    if (alertLevel === "critical") {
+
+    const dueCopy = getFeeDueAlertCopy(summary);
+    if (dueCopy) {
       return {
-        style: styles.alertCritical,
-        title: "জরুরি: পেমেন্ট বকেয়া",
-        body: `আপনার বকেয়া ${formatBdt(summary.outstanding)} (সর্বোচ্চ সীমা ${formatBdt(PLATFORM_FEE_MAX_DUE)})। দয়া করে দ্রুত bKash-এ পরিশোধ করুন।`,
+        style:
+          dueCopy.level === "critical" ? styles.alertCritical : styles.alertWarn,
+        title: dueCopy.title,
+        body: dueCopy.body,
       };
     }
-    if (alertLevel === "warn") {
-      return {
-        style: styles.alertWarn,
-        title: "সতর্কতা: পেমেন্ট শীঘ্রই বাকি",
-        body: `আপনার বকেয়া ${formatBdt(summary.outstanding)}। ${formatBdt(PLATFORM_FEE_WARN_AT)} ছুঁয়ে গেছে — সীমা ${formatBdt(PLATFORM_FEE_MAX_DUE)} এর আগে পরিশোধ করুন।`,
-      };
-    }
+
     return {
       style: styles.alertOk,
       title: "প্ল্যাটফর্ম ফি বকেয়া",
@@ -131,7 +129,7 @@ function WholesaleHub({ profileId }: { profileId: string }) {
     if (!summary) return;
 
     if (summary.pendingPayment) {
-      Alert.alert(
+      showAppAlert(
         "অপেক্ষমাণ অনুরোধ",
         "আপনার আগের পেমেন্ট প্রুফ এখনো রিভিউ হচ্ছে। অনুমোদনের পর নতুন করে জমা দিন।"
       );
@@ -140,18 +138,18 @@ function WholesaleHub({ profileId }: { profileId: string }) {
 
     const amountNum = Number(amount);
     if (!amountNum || amountNum <= 0) {
-      Alert.alert("ভুল পরিমাণ", "যে পরিমাণ পাঠিয়েছেন সেটি সঠিকভাবে লিখুন।");
+      showAppAlert("ভুল পরিমাণ", "যে পরিমাণ পাঠিয়েছেন সেটি সঠিকভাবে লিখুন।");
       return;
     }
     if (!bkashNumber.trim() || bkashNumber.trim().length < 11) {
-      Alert.alert(
+      showAppAlert(
         "bKash নম্বর প্রয়োজন",
         "যে bKash নম্বর থেকে টাকা পাঠিয়েছেন সেটি লিখুন (১১ ডিজিট)।"
       );
       return;
     }
     if (!reference.trim() || reference.trim().length < 4) {
-      Alert.alert(
+      showAppAlert(
         "রেফারেন্স প্রয়োজন",
         "bKash Transaction ID / Reference নম্বর সঠিকভাবে লিখুন।"
       );
@@ -176,14 +174,14 @@ function WholesaleHub({ profileId }: { profileId: string }) {
       await onRefresh();
     } catch (err: any) {
       if (err?.code === "23505") {
-        Alert.alert(
+        showAppAlert(
           "অপেক্ষমাণ অনুরোধ",
           "ইতিমধ্যে একটি পেমেন্ট প্রুফ পেন্ডিং আছে।"
         );
         await onRefresh();
         return;
       }
-      Alert.alert(
+      showAppAlert(
         "জমা ব্যর্থ",
         err?.message || "কিছু সমস্যা হয়েছে। আবার চেষ্টা করুন।"
       );

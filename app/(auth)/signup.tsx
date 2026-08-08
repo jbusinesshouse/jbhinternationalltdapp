@@ -1,3 +1,4 @@
+import { showAppAlert } from '@/context/AppAlertContext'
 import { useAuth } from '@/hooks/useAuth'
 import { compressAvatarImage } from '@/lib/compressImage'
 import { supabase } from '@/lib/supabase'
@@ -8,7 +9,6 @@ import { router } from 'expo-router'
 import React, { useMemo, useState } from 'react'
 import {
     ActivityIndicator,
-    Alert,
     Image,
     Linking,
     ScrollView,
@@ -168,11 +168,11 @@ const Signup = () => {
             !selectedUpazila ||
             !isChecked
         ) {
-            Alert.alert('Error', 'All required fields must be filled')
+            showAppAlert('তথ্য অসম্পূর্ণ', 'অনুগ্রহ করে সব প্রয়োজনীয় ঘর পূরণ করুন।')
             return
         }
         if (password !== confirmPassword) {
-            Alert.alert('Error', 'Passwords do not match')
+            showAppAlert('পাসওয়ার্ড মিলছে না', 'পাসওয়ার্ড ও নিশ্চিত পাসওয়ার্ড একই হতে হবে।')
             return
         }
 
@@ -195,7 +195,7 @@ const Signup = () => {
                 if (!referralData) {
                     setIsSettingUp(false)
                     setLoading(false)
-                    Alert.alert('Error', 'Invalid referral code.')
+                    showAppAlert('ভুল রেফারেল কোড', 'রেফারেল কোডটি সঠিক নয়।')
                     return
                 }
 
@@ -301,7 +301,7 @@ const Signup = () => {
                 }
             }
 
-            Alert.alert('Success', 'Account created successfully 🎉')
+            showAppAlert('সফল', 'আপনার অ্যাকাউন্ট তৈরি হয়েছে।')
             setIsSettingUp(false);
             // setTimeout(() => {
             //     router.replace('/signin')
@@ -311,7 +311,7 @@ const Signup = () => {
                 console.error('Full signup error:', err)
             }
             setIsSettingUp(false);
-            Alert.alert('Signup failed', err.message || err.hint || 'Please try again later')
+            showAppAlert('নিবন্ধন হয়নি', err.message || err.hint || 'কিছু সমস্যা হয়েছে। একটু পর আবার চেষ্টা করুন।')
         } finally {
             setLoading(false)
         }

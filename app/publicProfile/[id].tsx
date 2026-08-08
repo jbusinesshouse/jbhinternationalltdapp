@@ -3,13 +3,13 @@ import SingleProduct from "@/components/SingleProduct";
 import StoreProductSearch, {
   useStoreProductSearch,
 } from "@/components/StoreProductSearch";
+import { showAppAlert } from "@/context/AppAlertContext";
 import { supabase } from "@/lib/supabase";
 import { styles as sharedStyles } from "@/styles/profile";
 import { router, useLocalSearchParams, useNavigation } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   FlatList,
   Image,
   Modal,
@@ -288,11 +288,11 @@ const PublicProfile = () => {
         <Pressable style={s.modalOverlay} onPress={() => setMenuVisible(false)}>
           <View style={s.menuContainer}>
             <Pressable style={s.menuItem} onPress={handleBlockUser}>
-              <Text style={{ color: "red", fontWeight: "500" }}>Block User</Text>
+              <Text style={{ color: "red", fontWeight: "500" }}>ইউজার ব্লক</Text>
             </Pressable>
             <View style={{ height: 1, backgroundColor: "#eee" }} />
             <Pressable style={s.menuItem} onPress={handleReportUser}>
-              <Text style={{ fontWeight: "500" }}>Report User</Text>
+              <Text style={{ fontWeight: "500" }}>রিপোর্ট করুন</Text>
             </Pressable>
           </View>
         </Pressable>
@@ -335,10 +335,10 @@ const PublicProfile = () => {
 
       <ConfirmModal
         visible={showBlockModal}
-        title="Block User"
-        description={`Are you sure you want to block ${profile.store_name || profile.full_name}?`}
-        confirmText="Block"
-        cancelText="Cancel"
+        title="ইউজার ব্লক"
+        description={`আপনি কি ${profile.store_name || profile.full_name} কে ব্লক করতে চান?`}
+        confirmText="ব্লক"
+        cancelText="বাতিল"
         danger
         onCancel={() => setShowBlockModal(false)}
         onConfirm={async () => {
@@ -349,7 +349,7 @@ const PublicProfile = () => {
               data: { user },
             } = await supabase.auth.getUser();
             if (!user) {
-              Alert.alert("Error", "You must be logged in to block users.");
+              showAppAlert("সাইন ইন প্রয়োজন", "ইউজার ব্লক করতে সাইন ইন করুন।");
               return;
             }
 
@@ -360,22 +360,22 @@ const PublicProfile = () => {
 
             if (error) {
               if (error.code === "23505") {
-                Alert.alert(
-                  "Already Blocked",
-                  "You have already blocked this user."
+                showAppAlert(
+                  "ইতিমধ্যে ব্লক",
+                  "আপনি এই ইউজারকে আগেই ব্লক করেছেন।"
                 );
               } else {
                 throw error;
               }
             } else {
-              Alert.alert(
-                "User Blocked",
-                "Successfully blocked. You will no longer see this user's products.",
-                [{ text: "OK", onPress: () => navigation.goBack() }]
+              showAppAlert(
+                "ব্লক হয়েছে",
+                "ইউজারকে সফলভাবে ব্লক করা হয়েছে।",
+                [{ text: "ঠিক আছে", onPress: () => navigation.goBack() }]
               );
             }
           } catch {
-            Alert.alert("Error", "Something went wrong. Please try again.");
+            showAppAlert("সমস্যা", "কিছু সমস্যা হয়েছে। আবার চেষ্টা করুন।");
           }
         }}
       />

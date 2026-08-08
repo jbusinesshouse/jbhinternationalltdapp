@@ -1,10 +1,10 @@
+import { showAppAlert } from '@/context/AppAlertContext'
 import { supabase } from '@/lib/supabase'
 import { styles } from '@/styles/profile'
 import { useNavigation, useRouter } from 'expo-router'
 import React, { useEffect, useState } from 'react'
 import {
     ActivityIndicator,
-    Alert,
     Image,
     Pressable,
     ScrollView,
@@ -142,7 +142,7 @@ const Notifications = () => {
             if (__DEV__) {
                 console.log('Cancel action error:', err)
             }
-            Alert.alert('Error', 'Failed to update cancellation request.')
+            showAppAlert('সমস্যা', 'বাতিলের অনুরোধ আপডেট করা যায়নি।')
         } finally {
             setActingId(null)
         }

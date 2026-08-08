@@ -1,4 +1,5 @@
 import ConfirmModal from "@/components/modal/ConfirmModal";
+import { showAppAlert } from "@/context/AppAlertContext";
 import {
   FeaturedStoreRequest,
   fetchMyLatestFeaturedRequest,
@@ -11,7 +12,6 @@ import { useNavigation } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Image,
   KeyboardAvoidingView,
   Platform,
@@ -76,7 +76,7 @@ const FeaturedRequest = () => {
       if (__DEV__) {
         console.warn("[FeaturedRequest] load failed:", err);
       }
-      Alert.alert(
+      showAppAlert(
         "সমস্যা",
         err?.message || "অনুরোধের স্ট্যাটাস লোড করা যায়নি। আবার চেষ্টা করুন।"
       );
@@ -122,7 +122,7 @@ const FeaturedRequest = () => {
       
       // Partial unique index on pending → Postgres 23505
       if (err?.code === "23505") {
-        Alert.alert(
+        showAppAlert(
           "অনুরোধ অপেক্ষমাণ",
           "আপনার ইতিমধ্যে একটি পেন্ডিং ফিচারড স্টোর অনুরোধ আছে।"
         );
@@ -130,7 +130,7 @@ const FeaturedRequest = () => {
         return;
       }
 
-      Alert.alert(
+      showAppAlert(
         "সমস্যা",
         err?.message || "কিছু সমস্যা হয়েছে। আবার চেষ্টা করুন।"
       );
@@ -263,7 +263,7 @@ const FeaturedRequest = () => {
         visible={showSuccessModal}
         title="অনুরোধ জমা হয়েছে"
         description="ধন্যবাদ। আমাদের টিম শীঘ্রই আপনার সাথে যোগাযোগ করবে।"
-        confirmText="OK"
+        confirmText="ঠিক আছে"
         cancelText={null}
         onConfirm={handleSuccessClose}
       />

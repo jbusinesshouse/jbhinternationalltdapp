@@ -1,8 +1,10 @@
+import { AppAlertProvider } from '@/context/AppAlertContext'
 import { ChatInboxProvider } from '@/context/ChatInboxContext'
 import { UserProvider, useUser } from '@/context/UserContext'
 import useAppUpdate from '@/hooks/useAppUpdate'
 import { useProtectedRoute } from "@/hooks/useAuth"
 import { useKeyboardBehavior } from '@/hooks/useKeyboardBehavior'
+import usePlatformFeeDueAlert from '@/hooks/usePlatformFeeDueAlert'
 import { Stack } from "expo-router"
 import * as SplashScreen from 'expo-splash-screen'
 import { useCallback, useEffect } from 'react'
@@ -16,9 +18,9 @@ SplashScreen.preventAutoHideAsync().catch(() => {})
 const AccountStatusBanner = ({ status }: { status: string }) => {
   // Map styles based on the enum values
   const config = {
-    freeze: { color: '#ef4444', text: 'Your account is frozen. Please contact support.' },
-    restricted: { color: '#f59e0b', text: 'Your account is restricted. Some features may be limited.' }
-  }[status as 'freeze' | 'restricted'] || { color: '#6b7280', text: 'Account notice' };
+    freeze: { color: '#ef4444', text: 'আপনার অ্যাকাউন্ট স্থগিত আছে। সাপোর্টে যোগাযোগ করুন।' },
+    restricted: { color: '#f59e0b', text: 'আপনার অ্যাকাউন্ট সীমিত করা হয়েছে। কিছু সুবিধা ব্যবহার করা যাবে না।' }
+  }[status as 'freeze' | 'restricted'] || { color: '#6b7280', text: 'অ্যাকাউন্ট সম্পর্কে নোটিশ' };
 
   return (
     <View style={[styles.banner, { backgroundColor: config.color }]}>
@@ -32,6 +34,7 @@ function RootLayoutNav() {
   useProtectedRoute();
 
   useAppUpdate();
+  usePlatformFeeDueAlert();
 
   const onLayoutRootView = useCallback(() => {
     SplashScreen.hideAsync().catch(() => {});
@@ -71,13 +74,15 @@ export default function RootLayout() {
   return (
     <UserProvider>
       <ChatInboxProvider>
-        <KeyboardAvoidingView
-          style={{ flex: 1 }}
-          behavior={behaviour}
-          keyboardVerticalOffset={0}
-        >
-          <RootLayoutNav />
-        </KeyboardAvoidingView>
+        <AppAlertProvider>
+          <KeyboardAvoidingView
+            style={{ flex: 1 }}
+            behavior={behaviour}
+            keyboardVerticalOffset={0}
+          >
+            <RootLayoutNav />
+          </KeyboardAvoidingView>
+        </AppAlertProvider>
       </ChatInboxProvider>
     </UserProvider>
   )

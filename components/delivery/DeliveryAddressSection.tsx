@@ -3,6 +3,7 @@ import DeliveryAddressFormFields, {
   AddressFormValues,
   emptyAddressForm,
 } from '@/components/delivery/DeliveryAddressFormFields'
+import { showAppAlert } from '@/context/AppAlertContext'
 import {
   createDeliveryAddress,
   deleteDeliveryAddress,
@@ -14,7 +15,6 @@ import {
 import React, { useCallback, useEffect, useState } from 'react'
 import {
   ActivityIndicator,
-  Alert,
   Pressable,
   StyleSheet,
   Text,
@@ -55,7 +55,7 @@ export default function DeliveryAddressSection({
       setAddresses(rows)
     } catch (e: any) {
       if (__DEV__) console.log(e)
-      Alert.alert('Error', e?.message || 'Failed to load delivery addresses')
+      showAppAlert('সমস্যা', e?.message || 'ডেলিভারি ঠিকানা লোড করা যায়নি।')
     } finally {
       setLoading(false)
     }
@@ -82,7 +82,7 @@ export default function DeliveryAddressSection({
       setDefaultId(null)
       onProfileDefaultChange?.(null)
     } catch (e: any) {
-      Alert.alert('Error', e?.message || 'Could not update default')
+      showAppAlert('সমস্যা', e?.message || 'ডিফল্ট ঠিকানা আপডেট করা যায়নি।')
     } finally {
       setSaving(false)
     }
@@ -95,7 +95,7 @@ export default function DeliveryAddressSection({
       setDefaultId(id)
       onProfileDefaultChange?.(id)
     } catch (e: any) {
-      Alert.alert('Error', e?.message || 'Could not update default')
+      showAppAlert('সমস্যা', e?.message || 'ডিফল্ট ঠিকানা আপডেট করা যায়নি।')
     } finally {
       setSaving(false)
     }
@@ -103,7 +103,7 @@ export default function DeliveryAddressSection({
 
   const handleCreate = async () => {
     if (!form.district.trim() || !form.address.trim()) {
-      Alert.alert('Missing Info', 'District and address are required')
+      showAppAlert('তথ্য অসম্পূর্ণ', 'জেলা ও ঠিকানা আবশ্যক।')
       return
     }
     try {
@@ -113,7 +113,7 @@ export default function DeliveryAddressSection({
       setForm(emptyAddressForm())
       setShowForm(false)
     } catch (e: any) {
-      Alert.alert('Error', e?.message || 'Could not save address')
+      showAppAlert('সমস্যা', e?.message || 'ঠিকানা সেভ করা যায়নি।')
     } finally {
       setSaving(false)
     }
@@ -131,7 +131,7 @@ export default function DeliveryAddressSection({
       }
       setDeleteTarget(null)
     } catch (e: any) {
-      Alert.alert('Error', e?.message || 'Could not delete address')
+      showAppAlert('সমস্যা', e?.message || 'ঠিকানা ডিলিট করা যায়নি।')
     } finally {
       setSaving(false)
     }
@@ -250,9 +250,9 @@ export default function DeliveryAddressSection({
 
       <ConfirmModal
         visible={!!deleteTarget}
-        title="Delete address?"
-        description="This saved delivery address will be removed."
-        confirmText="Delete"
+        title="ঠিকানা ডিলিট করবেন?"
+        description="এই সংরক্ষিত ডেলিভারি ঠিকানা ডিলিট হয়ে যাবে।"
+        confirmText="ডিলিট করুন"
         danger
         onConfirm={handleDelete}
         onCancel={() => setDeleteTarget(null)}

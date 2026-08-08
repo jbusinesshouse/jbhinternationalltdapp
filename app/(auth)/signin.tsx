@@ -1,9 +1,9 @@
+import { showAppAlert } from '@/context/AppAlertContext'
 import { supabase } from '@/lib/supabase'
 import { useRouter } from 'expo-router'
 import React, { useState } from 'react'
 import {
     ActivityIndicator,
-    Alert,
     ScrollView,
     StyleSheet,
     Text,
@@ -20,7 +20,7 @@ export default function Signin() {
 
     const handleSignin = async () => {
         if (!email || !password) {
-            Alert.alert('Error', 'Please fill in all fields')
+            showAppAlert('তথ্য অসম্পূর্ণ', 'অনুগ্রহ করে ইমেইল ও পাসওয়ার্ড দিন।')
             return
         }
 
@@ -39,12 +39,12 @@ export default function Signin() {
             if (error) throw error
 
             // Navigation happens automatically via useProtectedRoute
-            Alert.alert('Success', 'Welcome back!')
+            showAppAlert('সফল', 'স্বাগতম ফিরে এসেছেন!')
         } catch (err: any) {
             if (__DEV__) {
                 console.error('Signin error:', err)
             }
-            Alert.alert('Sign in failed', err.message || 'Invalid credentials')
+            showAppAlert('সাইন ইন হয়নি', err.message || 'ইমেইল বা পাসওয়ার্ড ভুল হয়েছে।')
         } finally {
             setLoading(false)
         }

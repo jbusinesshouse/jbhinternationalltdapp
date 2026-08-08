@@ -1,9 +1,9 @@
+import { showAppAlert } from '@/context/AppAlertContext';
 import { supabase } from '@/lib/supabase'; // 👈 make sure path is correct
 import { styles } from '@/styles/support';
 import { useNavigation } from 'expo-router';
 import React, { useState } from 'react';
 import {
-    Alert,
     Image,
     KeyboardAvoidingView,
     Platform,
@@ -23,7 +23,7 @@ const Support = () => {
 
     const handleSubmit = async () => {
         if (!subject.trim() || !message.trim()) {
-            Alert.alert('তথ্য অসম্পূর্ণ', 'অনুগ্রহ করে সব ঘর পূরণ করুন।')
+            showAppAlert('তথ্য অসম্পূর্ণ', 'অনুগ্রহ করে সব ঘর পূরণ করুন।')
             return
         }
 
@@ -56,12 +56,12 @@ const Support = () => {
                 throw insertError
             }
 
-            Alert.alert(
+            showAppAlert(
                 'অনুরোধ জমা হয়েছে',
                 'আমাদের সাপোর্ট টিম শীঘ্রই আপনার সাথে যোগাযোগ করবে।',
                 [
                     {
-                        text: 'OK',
+                        text: 'ঠিক আছে',
                         onPress: () => {
                             setSubject('')
                             setMessage('')
@@ -74,7 +74,7 @@ const Support = () => {
             if (__DEV__) {
                 console.error('Support error:', err)
             }
-            Alert.alert(
+            showAppAlert(
                 'সমস্যা',
                 err.message || 'কিছু সমস্যা হয়েছে। আবার চেষ্টা করুন।'
             )

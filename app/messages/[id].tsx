@@ -1,3 +1,4 @@
+import { showAppAlert } from '@/context/AppAlertContext';
 import { useChatInbox } from '@/context/ChatInboxContext';
 import { useUser } from '@/context/UserContext';
 import {
@@ -12,7 +13,6 @@ import { router, useLocalSearchParams, useNavigation } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
     ActivityIndicator,
-    Alert,
     FlatList,
     Image,
     Keyboard,
@@ -116,7 +116,7 @@ const SingleMessage = () => {
             if (!messagesResult.error) {
                 setMessages(roomId, messagesResult.data);
             } else {
-                Alert.alert('Error', messagesResult.error);
+                showAppAlert('সমস্যা', messagesResult.error);
             }
 
             if (roomResult.data?.product?.name) {
@@ -155,7 +155,7 @@ const SingleMessage = () => {
 
         if (error) {
             setMessageVal(trimmed);
-            Alert.alert('Send failed', error);
+            showAppAlert('পাঠানো যায়নি', error);
             return;
         }
 

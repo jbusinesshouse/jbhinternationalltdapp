@@ -1,10 +1,11 @@
+import { showAppAlert } from '@/context/AppAlertContext'
 import React from 'react'
-import { Alert, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
+import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import CardSingleProduct from '../CardSingleProduct'
 
 const TopDeals = () => {
   const handleMore = () => {
-    Alert.alert('Show more button pressed!')
+    showAppAlert('আরও দেখুন', 'বাটন চাপা হয়েছে।')
   }
 
   return (

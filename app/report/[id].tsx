@@ -1,10 +1,10 @@
+import { showAppAlert } from '@/context/AppAlertContext';
 import { supabase } from '@/lib/supabase';
 import { styles } from '@/styles/support';
 import { Picker } from '@react-native-picker/picker';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
-    Alert,
     Image,
     KeyboardAvoidingView,
     Platform,
@@ -34,7 +34,7 @@ const ReportScreen = () => {
 
     const handleSubmit = async () => {
         if (!reason || !details.trim()) {
-            Alert.alert('Missing Information', 'Please select a reason and provide details.');
+            showAppAlert('তথ্য অসম্পূর্ণ', 'একটি কারণ বাছুন এবং বিস্তারিত লিখুন।');
             return;
         }
 
@@ -60,13 +60,14 @@ const ReportScreen = () => {
 
             if (insertError) throw insertError;
 
-            Alert.alert(
-                'Report Submitted',
-                `This ${type} has been reported. Our team will review it.`,
-                [{ text: 'OK', onPress: () => router.back() }]
+            const typeLabel = type === 'product' ? 'প্রোডাক্ট' : 'ইউজার';
+            showAppAlert(
+                'রিপোর্ট জমা হয়েছে',
+                `এই ${typeLabel} রিপোর্ট করা হয়েছে। আমাদের টিম খতিয়ে দেখবে।`,
+                [{ text: 'ঠিক আছে', onPress: () => router.back() }]
             );
         } catch (err: any) {
-            Alert.alert('Error', err.message || 'Failed to submit report.');
+            showAppAlert('সমস্যা', err.message || 'রিপোর্ট জমা দেওয়া যায়নি।');
         } finally {
             setSubmitting(false);
         }

@@ -1,4 +1,5 @@
 import ConfirmModal from "@/components/modal/ConfirmModal";
+import { showAppAlert } from "@/context/AppAlertContext";
 import {
   MAX_REVIEW_IMAGES,
   getReviewEligibility,
@@ -11,7 +12,6 @@ import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Image,
   KeyboardAvoidingView,
   Platform,
@@ -68,9 +68,9 @@ const WriteReview = () => {
       if (__DEV__) {
         console.warn("[WriteReview] load failed:", err);
       }
-      Alert.alert(
-        "Error",
-        err?.message || "Could not load review form. Please try again."
+      showAppAlert(
+        "সমস্যা",
+        err?.message || "রিভিউ ফর্ম লোড করা যায়নি।"
       );
     } finally {
       setLoading(false);
@@ -84,9 +84,9 @@ const WriteReview = () => {
   const pickImages = async () => {
     const remaining = MAX_REVIEW_IMAGES - images.length;
     if (remaining <= 0) {
-      Alert.alert(
-        "Limit reached",
-        `You can upload up to ${MAX_REVIEW_IMAGES} images.`
+      showAppAlert(
+        "সীমা পূর্ণ",
+        `আপনি সর্বোচ্চ ${MAX_REVIEW_IMAGES}টি ছবি আপলোড করতে পারবেন।`
       );
       return;
     }
@@ -154,7 +154,7 @@ const WriteReview = () => {
     if (!canReview || !orderId || !productId || !sellerId) return;
 
     if (rating < 1) {
-      Alert.alert("Rating required", "Please select a star rating.");
+      showAppAlert("রেটিং দিন", "অনুগ্রহ করে স্টার রেটিং বাছুন।");
       return;
     }
 
@@ -188,9 +188,9 @@ const WriteReview = () => {
       if (__DEV__) {
         console.warn("[WriteReview] submit failed:", err);
       }
-      Alert.alert(
-        "Error",
-        err?.message || "Failed to submit review. Please try again."
+      showAppAlert(
+        "সমস্যা",
+        err?.message || "রিভিউ জমা দেওয়া যায়নি।"
       );
     } finally {
       setSubmitting(false);
@@ -329,9 +329,9 @@ const WriteReview = () => {
 
       <ConfirmModal
         visible={showSuccessModal}
-        title="Review submitted"
-        description="Thanks! Your review helps other buyers."
-        confirmText="Done"
+        title="রিভিউ জমা হয়েছে"
+        description="ধন্যবাদ! আপনার রিভিউ অন্য ক্রেতাদের সাহায্য করবে।"
+        confirmText="ঠিক আছে"
         cancelText={null}
         onConfirm={handleSuccessClose}
       />
