@@ -553,6 +553,10 @@ const Profile = () => {
                     <ProfileLink title="Privacy Policy" link="/privacyPolicy" />
                     <ProfileLink title="Terms & Conditions" link="/termsAndConditions" />
                     <ProfileLink title="About App" link="/aboutApp" />
+                    <ProfileLink
+                        title="Content Creator Referral"
+                        link="/contentCreatorReferral"
+                    />
                     <ProfileLink title="Support" link="/support" />
 
                     <Pressable
