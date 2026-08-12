@@ -2,8 +2,12 @@ import ConfirmModal from "@/components/modal/ConfirmModal";
 import { showAppAlert } from "@/context/AppAlertContext";
 import {
   fetchMyLatestReferralCreatorApplication,
+  fetchMyReferralDashboard,
+  formatCompactJoinDate,
+  MyReferralDashboard,
   ReferralCreatorApplication,
   ReferralCreatorPlatform,
+  storeTypeLabel,
   submitReferralCreatorApplication,
 } from "@/lib/referralCreatorApplications";
 import { supabase } from "@/lib/supabase";
@@ -55,6 +59,7 @@ const ContentCreatorReferral = () => {
   const [loading, setLoading] = useState(true);
   const [latestApplication, setLatestApplication] =
     useState<ReferralCreatorApplication | null>(null);
+  const [dashboard, setDashboard] = useState<MyReferralDashboard | null>(null);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
 
   const loadState = useCallback(async () => {
@@ -82,6 +87,13 @@ const ContentCreatorReferral = () => {
       if (profile?.full_name) setFullName(profile.full_name);
       if (profile?.phone) setPhone(profile.phone);
       setLatestApplication(application);
+
+      if (application?.status === "approved") {
+        const dash = await fetchMyReferralDashboard(user.id);
+        setDashboard(dash);
+      } else {
+        setDashboard(null);
+      }
     } catch (err: any) {
       if (__DEV__) {
         console.warn("[ContentCreatorReferral] load failed:", err);
@@ -200,151 +212,220 @@ const ContentCreatorReferral = () => {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <Text style={styles.sectionTitle}>কনটেন্ট ক্রিয়েটর রেফারেল প্রোগ্রাম</Text>
-          <Text style={styles.paragraph}>
-            আপনি যদি কনটেন্ট ক্রিয়েটর হন, এই প্রোগ্রামে আবেদন করতে পারেন। আবেদন
-            জমা দিলে আমাদের টিম আপনার সাথে যোগাযোগ করে নিশ্চিত করবে। এরপর আপনাকে
-            একটি কাস্টম রেফারেল আইডি দেওয়া হবে, যা দিয়ে নতুন ইউজার সাইন আপ করতে
-            পারবে।
-          </Text>
-
-          <View style={local.infoCard}>
-            <Text style={local.infoTitle}>কীভাবে কাজ করে?</Text>
-            <Text style={local.infoStep}>১. নিচের ফর্ম পূরণ করে আবেদন জমা দিন</Text>
-            <Text style={local.infoStep}>
-              ২. আমাদের টিম ফোন বা মেসেজে আপনার সাথে যোগাযোগ করবে
-            </Text>
-            <Text style={local.infoStep}>
-              ৩. নিশ্চিত হলে আপনাকে কাস্টম রেফারেল আইডি দেওয়া হবে
-            </Text>
-          </View>
-
-          {approved ? (
-            <View style={local.statusCard}>
-              <Text style={local.statusTitle}>আবেদন অনুমোদিত</Text>
-              <Text style={local.statusBody}>
-                আপনার আবেদন অনুমোদন করা হয়েছে। রেফারেল আইডি পেতে আমাদের টিমের
-                সাথে যোগাযোগ রাখুন (যদি এখনো না পেয়ে থাকেন)।
-              </Text>
-            </View>
-          ) : pending ? (
-            <View style={local.statusCard}>
-              <Text style={local.statusTitle}>আবেদন অপেক্ষমাণ</Text>
-              <Text style={local.statusBody}>
-                আপনি
-                {latestApplication?.created_at
-                  ? ` ${new Date(latestApplication.created_at).toLocaleDateString("bn-BD")} তারিখে`
-                  : ""}{" "}
-                আবেদন জমা দিয়েছেন। আমাদের টিম শীঘ্রই আপনার সাথে যোগাযোগ করবে।
-              </Text>
-              {latestApplication ? (
-                <Text style={local.priorMessage}>
-                  প্ল্যাটফর্ম: {PLATFORM_LABEL[latestApplication.platform]}
-                  {"\n"}
-                  লিংক: {latestApplication.profile_url}
-                </Text>
-              ) : null}
-            </View>
-          ) : (
+          {approved && dashboard ? (
             <>
-              {latestApplication?.status === "rejected" ? (
-                <View style={[local.statusCard, local.statusCardWarn]}>
-                  <Text style={local.statusTitle}>আগের আবেদন প্রত্যাখ্যাত</Text>
-                  <Text style={local.statusBody}>
-                    নিচে নতুন করে আবার আবেদন জমা দিতে পারবেন।
+              <Text style={styles.sectionTitle}>আপনার রেফারেল ড্যাশবোর্ড</Text>
+              <Text style={styles.paragraph}>
+                আপনার কোড দিয়ে সাইন আপ করা ইউজারদের তালিকা নিচে দেখানো হচ্ছে।
+              </Text>
+
+              <View style={local.dashHeader}>
+                <View style={local.codeBlock}>
+                  <Text style={local.codeLabel}>রেফারেল কোড</Text>
+                  <Text style={local.codeValue}>{dashboard.creator.code}</Text>
+                </View>
+                <View
+                  style={[
+                    local.statusBadge,
+                    dashboard.creator.active
+                      ? local.statusBadgeOn
+                      : local.statusBadgeOff,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      local.statusBadgeText,
+                      dashboard.creator.active
+                        ? local.statusBadgeTextOn
+                        : local.statusBadgeTextOff,
+                    ]}
+                  >
+                    {dashboard.creator.active ? "সক্রিয়" : "বন্ধ"}
                   </Text>
                 </View>
-              ) : null}
-
-              <Text style={styles.inputLabel}>আপনার নাম</Text>
-              <TextInput
-                value={fullName}
-                onChangeText={setFullName}
-                placeholder="পুরো নাম লিখুন"
-                placeholderTextColor="#9CA3AF"
-                style={styles.input}
-              />
-
-              <Text style={styles.inputLabel}>মোবাইল নম্বর</Text>
-              <TextInput
-                value={phone}
-                onChangeText={setPhone}
-                placeholder="01XXXXXXXXX"
-                placeholderTextColor="#9CA3AF"
-                style={styles.input}
-                keyboardType="phone-pad"
-              />
-
-              <Text style={styles.inputLabel}>কোন প্ল্যাটফর্মে কনটেন্ট করেন?</Text>
-              <View style={local.platformRow}>
-                {PLATFORMS.map((item) => {
-                  const selected = platform === item.value;
-                  return (
-                    <Pressable
-                      key={item.value}
-                      style={[
-                        local.platformChip,
-                        selected && local.platformChipSelected,
-                      ]}
-                      onPress={() => setPlatform(item.value)}
-                    >
-                      <Text
-                        style={[
-                          local.platformChipText,
-                          selected && local.platformChipTextSelected,
-                        ]}
-                      >
-                        {item.label}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
               </View>
 
-              <Text style={styles.inputLabel}>প্রোফাইল / পেজ লিংক</Text>
-              <TextInput
-                value={profileUrl}
-                onChangeText={setProfileUrl}
-                placeholder="যেমন: facebook.com/yourpage"
-                placeholderTextColor="#9CA3AF"
-                style={styles.input}
-                autoCapitalize="none"
-                autoCorrect={false}
-              />
+              <Text style={local.totalLine}>
+                মোট যোগদান: {dashboard.totalSignups.toLocaleString("bn-BD")}
+              </Text>
 
-              <Text style={styles.inputLabel}>ফলোয়ার সংখ্যা (ঐচ্ছিক)</Text>
-              <TextInput
-                value={followerCount}
-                onChangeText={setFollowerCount}
-                placeholder="যেমন: ৫০০০ বা ১০ হাজার"
-                placeholderTextColor="#9CA3AF"
-                style={styles.input}
-              />
-
-              <Text style={styles.inputLabel}>কিছু বলতে চান? (ঐচ্ছিক)</Text>
-              <TextInput
-                value={message}
-                onChangeText={setMessage}
-                placeholder="আপনার কনটেন্ট বা অডিয়েন্স সম্পর্কে সংক্ষেপে লিখুন..."
-                placeholderTextColor="#9CA3AF"
-                style={[styles.input, styles.textArea]}
-                multiline
-                numberOfLines={5}
-                textAlignVertical="top"
-              />
-
-              <Pressable
-                style={[
-                  styles.submitBtn,
-                  !canSubmit && styles.submitBtnDisabled,
-                ]}
-                onPress={handleSubmit}
-                disabled={!canSubmit}
-              >
-                <Text style={styles.submitBtnText}>
-                  {submitting ? "জমা হচ্ছে..." : "আবেদন জমা দিন"}
+              {dashboard.signups.length === 0 ? (
+                <Text style={local.emptyList}>
+                  এখনো কেউ এই কোড দিয়ে যোগ দেননি।
                 </Text>
-              </Pressable>
+              ) : (
+                <View style={local.listWrap}>
+                  {dashboard.signups.map((row) => (
+                    <View key={row.id} style={local.listRow}>
+                      <Text style={local.listRowText} numberOfLines={1}>
+                        {row.display_name}
+                        {" · "}
+                        {storeTypeLabel(row.store_type)}
+                        {" · "}
+                        {formatCompactJoinDate(row.joined_at)}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+            </>
+          ) : (
+            <>
+              <Text style={styles.sectionTitle}>
+                কনটেন্ট ক্রিয়েটর রেফারেল প্রোগ্রাম
+              </Text>
+              <Text style={styles.paragraph}>
+                আপনি যদি কনটেন্ট ক্রিয়েটর হন, এই প্রোগ্রামে আবেদন করতে পারেন। আবেদন
+                জমা দিলে আমাদের টিম আপনার সাথে যোগাযোগ করে নিশ্চিত করবে। এরপর আপনাকে
+                একটি কাস্টম রেফারেল আইডি দেওয়া হবে, যা দিয়ে নতুন ইউজার সাইন আপ করতে
+                পারবে।
+              </Text>
+
+              <View style={local.infoCard}>
+                <Text style={local.infoTitle}>কীভাবে কাজ করে?</Text>
+                <Text style={local.infoStep}>
+                  ১. নিচের ফর্ম পূরণ করে আবেদন জমা দিন
+                </Text>
+                <Text style={local.infoStep}>
+                  ২. আমাদের টিম ফোন বা মেসেজে আপনার সাথে যোগাযোগ করবে
+                </Text>
+                <Text style={local.infoStep}>
+                  ৩. নিশ্চিত হলে আপনাকে কাস্টম রেফারেল আইডি দেওয়া হবে
+                </Text>
+              </View>
+
+              {approved ? (
+                <View style={local.statusCard}>
+                  <Text style={local.statusTitle}>আবেদন অনুমোদিত</Text>
+                  <Text style={local.statusBody}>
+                    আপনার আবেদন অনুমোদন করা হয়েছে। রেফারেল আইডি পেতে আমাদের টিমের
+                    সাথে যোগাযোগ রাখুন (যদি এখনো না পেয়ে থাকেন)।
+                  </Text>
+                </View>
+              ) : pending ? (
+                <View style={local.statusCard}>
+                  <Text style={local.statusTitle}>আবেদন অপেক্ষমাণ</Text>
+                  <Text style={local.statusBody}>
+                    আপনি
+                    {latestApplication?.created_at
+                      ? ` ${new Date(latestApplication.created_at).toLocaleDateString("bn-BD")} তারিখে`
+                      : ""}{" "}
+                    আবেদন জমা দিয়েছেন। আমাদের টিম শীঘ্রই আপনার সাথে যোগাযোগ করবে।
+                  </Text>
+                  {latestApplication ? (
+                    <Text style={local.priorMessage}>
+                      প্ল্যাটফর্ম: {PLATFORM_LABEL[latestApplication.platform]}
+                      {"\n"}
+                      লিংক: {latestApplication.profile_url}
+                    </Text>
+                  ) : null}
+                </View>
+              ) : (
+                <>
+                  {latestApplication?.status === "rejected" ? (
+                    <View style={[local.statusCard, local.statusCardWarn]}>
+                      <Text style={local.statusTitle}>
+                        আগের আবেদন প্রত্যাখ্যাত
+                      </Text>
+                      <Text style={local.statusBody}>
+                        নিচে নতুন করে আবার আবেদন জমা দিতে পারবেন।
+                      </Text>
+                    </View>
+                  ) : null}
+
+                  <Text style={styles.inputLabel}>আপনার নাম</Text>
+                  <TextInput
+                    value={fullName}
+                    onChangeText={setFullName}
+                    placeholder="পুরো নাম লিখুন"
+                    placeholderTextColor="#9CA3AF"
+                    style={styles.input}
+                  />
+
+                  <Text style={styles.inputLabel}>মোবাইল নম্বর</Text>
+                  <TextInput
+                    value={phone}
+                    onChangeText={setPhone}
+                    placeholder="01XXXXXXXXX"
+                    placeholderTextColor="#9CA3AF"
+                    style={styles.input}
+                    keyboardType="phone-pad"
+                  />
+
+                  <Text style={styles.inputLabel}>
+                    কোন প্ল্যাটফর্মে কনটেন্ট করেন?
+                  </Text>
+                  <View style={local.platformRow}>
+                    {PLATFORMS.map((item) => {
+                      const selected = platform === item.value;
+                      return (
+                        <Pressable
+                          key={item.value}
+                          style={[
+                            local.platformChip,
+                            selected && local.platformChipSelected,
+                          ]}
+                          onPress={() => setPlatform(item.value)}
+                        >
+                          <Text
+                            style={[
+                              local.platformChipText,
+                              selected && local.platformChipTextSelected,
+                            ]}
+                          >
+                            {item.label}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+
+                  <Text style={styles.inputLabel}>প্রোফাইল / পেজ লিংক</Text>
+                  <TextInput
+                    value={profileUrl}
+                    onChangeText={setProfileUrl}
+                    placeholder="যেমন: facebook.com/yourpage"
+                    placeholderTextColor="#9CA3AF"
+                    style={styles.input}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                  />
+
+                  <Text style={styles.inputLabel}>ফলোয়ার সংখ্যা (ঐচ্ছিক)</Text>
+                  <TextInput
+                    value={followerCount}
+                    onChangeText={setFollowerCount}
+                    placeholder="যেমন: ৫০০০ বা ১০ হাজার"
+                    placeholderTextColor="#9CA3AF"
+                    style={styles.input}
+                  />
+
+                  <Text style={styles.inputLabel}>কিছু বলতে চান? (ঐচ্ছিক)</Text>
+                  <TextInput
+                    value={message}
+                    onChangeText={setMessage}
+                    placeholder="আপনার কনটেন্ট বা অডিয়েন্স সম্পর্কে সংক্ষেপে লিখুন..."
+                    placeholderTextColor="#9CA3AF"
+                    style={[styles.input, styles.textArea]}
+                    multiline
+                    numberOfLines={5}
+                    textAlignVertical="top"
+                  />
+
+                  <Pressable
+                    style={[
+                      styles.submitBtn,
+                      !canSubmit && styles.submitBtnDisabled,
+                    ]}
+                    onPress={handleSubmit}
+                    disabled={!canSubmit}
+                  >
+                    <Text style={styles.submitBtnText}>
+                      {submitting ? "জমা হচ্ছে..." : "আবেদন জমা দিন"}
+                    </Text>
+                  </Pressable>
+                </>
+              )}
             </>
           )}
         </ScrollView>
@@ -442,6 +523,78 @@ const local = StyleSheet.create({
   },
   platformChipTextSelected: {
     color: "#fff",
+  },
+  dashHeader: {
+    marginTop: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  codeBlock: {
+    flex: 1,
+  },
+  codeLabel: {
+    fontSize: 12,
+    color: "#6b7280",
+    marginBottom: 2,
+  },
+  codeValue: {
+    fontSize: 22,
+    fontWeight: "700",
+    color: "#111",
+    letterSpacing: 0.5,
+  },
+  statusBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  statusBadgeOn: {
+    backgroundColor: "#ecfdf5",
+    borderColor: "#a7f3d0",
+  },
+  statusBadgeOff: {
+    backgroundColor: "#f3f4f6",
+    borderColor: "#e5e7eb",
+  },
+  statusBadgeText: {
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  statusBadgeTextOn: {
+    color: "#047857",
+  },
+  statusBadgeTextOff: {
+    color: "#6b7280",
+  },
+  totalLine: {
+    marginTop: 14,
+    marginBottom: 8,
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#111",
+  },
+  emptyList: {
+    marginTop: 8,
+    fontSize: 13,
+    color: "#6b7280",
+    lineHeight: 20,
+  },
+  listWrap: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: "#e5e7eb",
+  },
+  listRow: {
+    paddingVertical: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "#e5e7eb",
+  },
+  listRowText: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: "#333",
   },
 });
 
