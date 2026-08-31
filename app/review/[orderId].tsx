@@ -5,11 +5,18 @@ import {
   getReviewEligibility,
   submitProductReview,
 } from "@/lib/productReviews";
+import {
+  deleteLocalImageUris,
+  formatImageProcessingError,
+  formatUploadError,
+  isPreparedImageUri,
+  preparePickedProductImages,
+} from "@/lib/pickedImage";
 import { supabase } from "@/lib/supabase";
 import { styles } from "@/styles/support";
 import * as ImagePicker from "expo-image-picker";
 import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Image,
@@ -40,6 +47,8 @@ const WriteReview = () => {
   const [rating, setRating] = useState(0);
   const [comment, setComment] = useState("");
   const [images, setImages] = useState<string[]>([]);
+  const [pickingImages, setPickingImages] = useState(false);
+  const localImageUrisRef = useRef<string[]>([]);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
 
   const loadEligibility = useCallback(async () => {
@@ -81,7 +90,19 @@ const WriteReview = () => {
     loadEligibility();
   }, [loadEligibility]);
 
+  useEffect(() => {
+    localImageUrisRef.current = images.filter((uri) => isPreparedImageUri(uri));
+  }, [images]);
+
+  useEffect(() => {
+    return () => {
+      void deleteLocalImageUris(localImageUrisRef.current);
+    };
+  }, []);
+
   const pickImages = async () => {
+    if (pickingImages || submitting) return;
+
     const remaining = MAX_REVIEW_IMAGES - images.length;
     if (remaining <= 0) {
       showAppAlert(
@@ -98,17 +119,31 @@ const WriteReview = () => {
       selectionLimit: remaining,
     });
 
-    if (!result.canceled) {
+    if (result.canceled) return;
+
+    setPickingImages(true);
+    try {
+      const prepared = await preparePickedProductImages(
+        result.assets.map((asset) => asset.uri)
+      );
       setImages((prev) =>
-        [...prev, ...result.assets.map((a) => a.uri)].slice(
+        [...prev, ...prepared.map((image) => image.uri)].slice(
           0,
           MAX_REVIEW_IMAGES
         )
       );
+    } catch (error) {
+      showAppAlert("সমস্যা", formatImageProcessingError(error));
+    } finally {
+      setPickingImages(false);
     }
   };
 
   const removeImage = (index: number) => {
+    const uri = images[index];
+    if (uri && isPreparedImageUri(uri)) {
+      void deleteLocalImageUris([uri]);
+    }
     setImages((prev) => prev.filter((_, i) => i !== index));
   };
 
@@ -180,6 +215,9 @@ const WriteReview = () => {
         imageUris: images,
       });
 
+      await deleteLocalImageUris(images);
+      setImages([]);
+
       await markReviewNotificationDone(user.id);
       await notifySellerOfReview();
 
@@ -190,7 +228,7 @@ const WriteReview = () => {
       }
       showAppAlert(
         "সমস্যা",
-        err?.message || "রিভিউ জমা দেওয়া যায়নি।"
+        formatUploadError(err, "রিভিউ জমা দেওয়া যায়নি।")
       );
     } finally {
       setSubmitting(false);
@@ -304,9 +342,17 @@ const WriteReview = () => {
               ))}
 
               {images.length < MAX_REVIEW_IMAGES && (
-                <Pressable style={local.addImageBtn} onPress={pickImages}>
-                  <Text style={local.addImageText}>+</Text>
-                  <Text style={local.addImageHint}>Add</Text>
+                <Pressable
+                  style={local.addImageBtn}
+                  onPress={pickImages}
+                  disabled={pickingImages || submitting}
+                >
+                  <Text style={local.addImageText}>
+                    {pickingImages ? "..." : "+"}
+                  </Text>
+                  <Text style={local.addImageHint}>
+                    {pickingImages ? "Preparing" : "Add"}
+                  </Text>
                 </Pressable>
               )}
             </View>

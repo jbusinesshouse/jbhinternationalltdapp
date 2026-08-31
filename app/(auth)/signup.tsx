@@ -1,12 +1,18 @@
 import { showAppAlert } from '@/context/AppAlertContext'
 import { useAuth } from '@/hooks/useAuth'
 import { compressAvatarImage } from '@/lib/compressImage'
+import {
+    deleteLocalImageUris,
+    formatImageProcessingError,
+    isPreparedImageUri,
+    preparePickedAvatarImage,
+} from '@/lib/pickedImage'
 import { supabase } from '@/lib/supabase'
 import { Picker } from '@react-native-picker/picker'
 import Checkbox from 'expo-checkbox'
 import * as ImagePicker from 'expo-image-picker'
 import { router } from 'expo-router'
-import React, { useMemo, useState } from 'react'
+import React, { useEffect, useRef, useMemo, useState } from 'react'
 import {
     ActivityIndicator,
     Image,
@@ -109,22 +115,46 @@ const Signup = () => {
     // const [upazila, setUpazila] = useState([])
     const [selectedUpazila, setSelectedUpazila] = useState('')
     const [image, setImage] = useState<string | null>(null)
+    const [pickingImage, setPickingImage] = useState(false)
+    const localImageUriRef = useRef<string | null>(null)
     const [isChecked, setChecked] = useState(false);
     const [referralCode, setReferralCode] = useState('')
 
     const { setIsSettingUp } = useAuth();
 
+    useEffect(() => {
+        localImageUriRef.current = image && isPreparedImageUri(image) ? image : null;
+    }, [image]);
+
+    useEffect(() => {
+        return () => {
+            void deleteLocalImageUris([localImageUriRef.current]);
+        };
+    }, []);
 
     // ---- PICK IMAGE ----
     const pickImage = async () => {
+        if (pickingImage || loading) return;
+
         const result = await ImagePicker.launchImageLibraryAsync({
             mediaTypes: ['images'],
             allowsEditing: true,
             quality: 0.8,
         })
 
-        if (!result.canceled) {
-            setImage(result.assets[0].uri)
+        if (result.canceled) return;
+
+        setPickingImage(true);
+        try {
+            const prepared = await preparePickedAvatarImage(result.assets[0].uri);
+            if (image && isPreparedImageUri(image)) {
+                await deleteLocalImageUris([image]);
+            }
+            setImage(prepared.uri);
+        } catch (error) {
+            showAppAlert('সমস্যা', formatImageProcessingError(error));
+        } finally {
+            setPickingImage(false);
         }
     }
 
@@ -225,7 +255,9 @@ const Signup = () => {
             // Try to upload image using ArrayBuffer instead of Blob
             if (image) {
                 try {
-                    const compressed = await compressAvatarImage(image)
+                    const compressed = isPreparedImageUri(image)
+                        ? { uri: image }
+                        : await compressAvatarImage(image)
 
                     // Fetch the image as arrayBuffer
                     const response = await fetch(compressed.uri)
@@ -326,8 +358,14 @@ const Signup = () => {
             <View style={styles.container}>
                 <Text style={styles.title}>Create Account</Text>
 
-                <TouchableOpacity style={styles.imageBox} onPress={pickImage}>
-                    {image ? (
+                <TouchableOpacity
+                    style={styles.imageBox}
+                    onPress={pickImage}
+                    disabled={pickingImage || loading}
+                >
+                    {pickingImage ? (
+                        <ActivityIndicator color="#f5832b" />
+                    ) : image ? (
                         <Image source={{ uri: image }} style={styles.image} />
                     ) : (
                         <Text style={styles.imageText}>Pick Profile Image</Text>

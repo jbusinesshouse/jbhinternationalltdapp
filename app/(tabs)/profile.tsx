@@ -4,12 +4,18 @@ import { useUser } from '@/context/UserContext'
 import { useAuth } from '@/hooks/useAuth'
 import { useProfile } from '@/hooks/useProfile'
 import { compressAvatarImage } from '@/lib/compressImage'
+import {
+    deleteLocalImageUris,
+    formatImageProcessingError,
+    isPreparedImageUri,
+    preparePickedAvatarImage,
+} from '@/lib/pickedImage'
 import { supabase } from '@/lib/supabase'
 import { styles } from '@/styles/profile'
 import { Picker } from '@react-native-picker/picker'
 import * as ImagePicker from 'expo-image-picker'
 import { type Href, useNavigation, useRouter } from 'expo-router'
-import React, { useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import {
     ActivityIndicator,
     Image,
@@ -312,6 +318,19 @@ const Profile = () => {
     const [showSignoutModal, setShowSignoutModal] = useState(false)
 
     const [localImage, setLocalImage] = useState<string | null>(null)
+    const [pickingImage, setPickingImage] = useState(false)
+    const localImageUriRef = useRef<string | null>(null)
+
+    useEffect(() => {
+        localImageUriRef.current =
+            localImage && isPreparedImageUri(localImage) ? localImage : null;
+    }, [localImage]);
+
+    useEffect(() => {
+        return () => {
+            void deleteLocalImageUris([localImageUriRef.current]);
+        };
+    }, []);
 
     // 🔹 LOADING STATE
     if (loading) {
@@ -357,72 +376,77 @@ const Profile = () => {
     }
 
     const uploadAvatar = async (uri: string) => {
-        try {
-            setSaving(true)
+        const userId = profile.id
+        const filePath = `${userId}.jpg`
 
-            const userId = profile.id
-            const filePath = `${userId}.jpg`
+        const compressed = isPreparedImageUri(uri)
+            ? { uri }
+            : await compressAvatarImage(uri)
 
-            const compressed = await compressAvatarImage(uri)
+        const response = await fetch(compressed.uri)
+        const arrayBuffer = await response.arrayBuffer()
 
-            // 🔹 Convert to ArrayBuffer (same as signup)
-            const response = await fetch(compressed.uri)
-            const arrayBuffer = await response.arrayBuffer()
+        const { error: uploadError } = await supabase.storage
+            .from('profile-images')
+            .upload(filePath, arrayBuffer, {
+                contentType: 'image/jpeg',
+                upsert: true,
+            })
 
-            // 🔹 Upload (overwrite old image)
-            const { error: uploadError } = await supabase.storage
-                .from('profile-images')
-                .upload(filePath, arrayBuffer, {
-                    contentType: 'image/jpeg',
-                    upsert: true,
-                })
+        if (uploadError) throw uploadError
 
-            if (uploadError) throw uploadError
+        const { data } = supabase.storage
+            .from('profile-images')
+            .getPublicUrl(filePath)
 
-            // 🔹 Get public URL
-            const { data } = supabase.storage
-                .from('profile-images')
-                .getPublicUrl(filePath)
+        const publicUrl = `${data.publicUrl}?t=${Date.now()}`
 
-            const publicUrl = `${data.publicUrl}?t=${Date.now()}`
+        const { error: updateError } = await supabase
+            .from('profiles')
+            .update({ avatar_url: publicUrl })
+            .eq('id', userId)
 
-            // 🔹 Update profile
-            const { error: updateError } = await supabase
-                .from('profiles')
-                .update({ avatar_url: publicUrl })
-                .eq('id', userId)
+        if (updateError) throw updateError
 
-            if (updateError) throw updateError
-
-            // 🔹 Refresh UI
-            await refetch()
-        } catch (err) {
-            if (__DEV__) {
-                console.error('Avatar update failed:', err)
-            }
-            showAppAlert('সমস্যা', 'প্রোফাইল ছবি আপডেট করা যায়নি।')
-        } finally {
-            setSaving(false)
+        await refetch()
+        if (isPreparedImageUri(uri)) {
+            await deleteLocalImageUris([uri]);
         }
     }
 
     const pickImage = async () => {
+        if (pickingImage || saving) return;
+
         const result = await ImagePicker.launchImageLibraryAsync({
             mediaTypes: ['images'],
             allowsEditing: true,
             quality: 0.8,
         })
 
-        if (!result.canceled) {
-            const uri = result.assets[0].uri
+        if (result.canceled) return;
 
-            setLocalImage(uri)
-            setSaving(true)
-
-            await uploadAvatar(uri)
-
-            await refetch()
-            setLocalImage(null)
+        setPickingImage(true);
+        setSaving(true);
+        let preparedUri: string | null = null;
+        try {
+            const prepared = await preparePickedAvatarImage(result.assets[0].uri);
+            preparedUri = prepared.uri;
+            setLocalImage(prepared.uri);
+            await uploadAvatar(prepared.uri);
+            setLocalImage(null);
+            preparedUri = null;
+        } catch (err) {
+            if (__DEV__) {
+                console.error('Avatar pick failed:', err);
+            }
+            if (preparedUri) {
+                await deleteLocalImageUris([preparedUri]);
+            }
+            setLocalImage(null);
+            showAppAlert('সমস্যা', formatImageProcessingError(err));
+        } finally {
+            setPickingImage(false);
+            setSaving(false);
         }
     }
 

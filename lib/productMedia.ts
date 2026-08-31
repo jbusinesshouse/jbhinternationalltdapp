@@ -1,4 +1,5 @@
 import { compressProductImage } from "@/lib/compressImage";
+import { isPreparedImageUri } from "@/lib/pickedImage";
 import { supabase } from "@/lib/supabase";
 
 const BUCKET = "product-images";
@@ -41,9 +42,11 @@ export async function uploadProductImage(
   uri: string,
   folder: string
 ): Promise<UploadedProductImage> {
-  const compressed = await compressProductImage(uri);
+  const uploadUri = isPreparedImageUri(uri)
+    ? uri
+    : (await compressProductImage(uri)).uri;
 
-  const response = await fetch(compressed.uri);
+  const response = await fetch(uploadUri);
   if (!response.ok) {
     throw new Error("Failed to read compressed image");
   }

@@ -9,6 +9,14 @@ import {
     storagePathFromPublicUrl,
     uploadProductImage,
 } from '@/lib/productMedia';
+import {
+    deleteLocalImageUris,
+    formatImageProcessingError,
+    formatUploadError,
+    isPreparedImageUri,
+    preparePickedProductImage,
+    preparePickedProductImages,
+} from '@/lib/pickedImage';
 import { supabase } from '@/lib/supabase';
 import { styles } from '@/styles/productUpload';
 import Feather from '@expo/vector-icons/Feather';
@@ -68,6 +76,8 @@ const EditProduct = () => {
 
     const [loading, setLoading] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [pickingImages, setPickingImages] = useState(false);
+    const localImageUrisRef = useRef<string[]>([]);
 
     const [availableSizes, setAvailableSizes] = useState<DbSize[]>([]);
     const [categories, setCategories] = useState<Category[]>([]);
@@ -132,6 +142,19 @@ const EditProduct = () => {
 
         run();
     }, [parentCategory]);
+
+    useEffect(() => {
+        localImageUrisRef.current = [
+            mainImageIsNew && mainImage ? mainImage : null,
+            ...images.filter((image) => image.isNew).map((image) => image.uri),
+        ].filter((uri): uri is string => !!uri && isPreparedImageUri(uri));
+    }, [mainImage, mainImageIsNew, images]);
+
+    useEffect(() => {
+        return () => {
+            void deleteLocalImageUris(localImageUrisRef.current);
+        };
+    }, []);
 
     const fetchCategories = async () => {
         const { data, error } = await supabase
@@ -228,18 +251,33 @@ const EditProduct = () => {
     };
 
     const pickMainImage = async () => {
+        if (pickingImages || isSubmitting) return;
+
         const result = await ImagePicker.launchImageLibraryAsync({
             mediaTypes: ['images'],
             allowsEditing: true,
             quality: 0.8,
         });
-        if (!result.canceled) {
-            setMainImage(result.assets[0].uri);
+        if (result.canceled) return;
+
+        setPickingImages(true);
+        try {
+            const prepared = await preparePickedProductImage(result.assets[0].uri);
+            if (mainImageIsNew && mainImage && isPreparedImageUri(mainImage)) {
+                await deleteLocalImageUris([mainImage]);
+            }
+            setMainImage(prepared.uri);
             setMainImageIsNew(true);
+        } catch (error) {
+            showAppAlert('সমস্যা', formatImageProcessingError(error));
+        } finally {
+            setPickingImages(false);
         }
     };
 
     const pickAdditionalImages = async () => {
+        if (pickingImages || isSubmitting) return;
+
         const remaining = MAX_ADDITIONAL_IMAGES - images.length;
         if (remaining <= 0) {
             showAppAlert('সীমা পূর্ণ', `আপনি সর্বোচ্চ ${MAX_ADDITIONAL_IMAGES}টি অতিরিক্ত ছবি যোগ করতে পারবেন।`);
@@ -252,14 +290,27 @@ const EditProduct = () => {
             quality: 0.7,
             selectionLimit: remaining,
         });
-        if (!result.canceled) {
-            const newImgs = result.assets.map(a => ({ uri: a.uri, isNew: true }));
-            setImages(prev => [...prev, ...newImgs].slice(0, MAX_ADDITIONAL_IMAGES));
+        if (result.canceled) return;
+
+        setPickingImages(true);
+        try {
+            const prepared = await preparePickedProductImages(
+                result.assets.map((asset) => asset.uri)
+            );
+            const newImgs = prepared.map((image) => ({ uri: image.uri, isNew: true }));
+            setImages((prev) => [...prev, ...newImgs].slice(0, MAX_ADDITIONAL_IMAGES));
+        } catch (error) {
+            showAppAlert('সমস্যা', formatImageProcessingError(error));
+        } finally {
+            setPickingImages(false);
         }
     };
 
     const removeAdditionalImage = (index: number) => {
         const img = images[index];
+        if (img.isNew && isPreparedImageUri(img.uri)) {
+            void deleteLocalImageUris([img.uri]);
+        }
         if (img.dbId) setRemovedImageIds(prev => [...prev, img.dbId!]);
         if (!img.isNew) setRemovedImageUrls(prev => [...prev, img.uri]);
         setImages(prev => prev.filter((_, i) => i !== index));
@@ -600,6 +651,7 @@ const EditProduct = () => {
             showAppAlert('সফল', 'প্রোডাক্ট আপডেট হয়েছে।', [
                 { text: 'ঠিক আছে', onPress: () => navigation.goBack() }
             ]);
+            void deleteLocalImageUris(localImageUrisRef.current);
 
         } catch (err) {
             if (newlyUploadedPaths.length) {
@@ -607,7 +659,7 @@ const EditProduct = () => {
             }
             showAppAlert(
                 'সমস্যা',
-                err instanceof Error ? err.message : 'অপ্রত্যাশিত সমস্যা হয়েছে: ' + String(err)
+                formatUploadError(err, 'অপ্রত্যাশিত সমস্যা হয়েছে')
             );
         } finally {
             setIsSubmitting(false);
@@ -643,7 +695,17 @@ const EditProduct = () => {
             >
                 <View style={styles.section}>
                     <Text style={styles.sectionTitle}>Product Media</Text>
-                    <Pressable style={styles.mainImageBox} onPress={pickMainImage}>
+                    {pickingImages ? (
+                        <View style={{ paddingVertical: 12, alignItems: 'center' }}>
+                            <ActivityIndicator size="small" color="#111827" />
+                            <Text style={{ marginTop: 8, color: '#6b7280' }}>ছবি প্রস্তুত করা হচ্ছে...</Text>
+                        </View>
+                    ) : null}
+                    <Pressable
+                        style={styles.mainImageBox}
+                        onPress={pickMainImage}
+                        disabled={pickingImages || isSubmitting}
+                    >
                         {mainImage
                             ? <Image source={{ uri: mainImage }} style={styles.mainImage} />
                             : <Text style={styles.addImageText}>Upload Main Image</Text>}
@@ -666,7 +728,11 @@ const EditProduct = () => {
                             </View>
                         ))}
                         {images.length < MAX_ADDITIONAL_IMAGES ? (
-                            <Pressable style={styles.thumb} onPress={pickAdditionalImages}>
+                            <Pressable
+                                style={styles.thumb}
+                                onPress={pickAdditionalImages}
+                                disabled={pickingImages || isSubmitting}
+                            >
                                 <Text style={styles.addImageTextPlus}>+</Text>
                             </Pressable>
                         ) : null}
