@@ -29,9 +29,11 @@ jobs:
           distribution: temurin
           java-version: 17
 
-      # ✅ Setup Android SDK
+      # ✅ Setup Android SDK (do not request removed legacy `tools` package)
       - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
+        with:
+          packages: platform-tools
 
       # ✅ Clean install
       - name: Install dependencies

@@ -2,7 +2,7 @@
   "expo": {
     "name": "JBH International Limited",
     "slug": "j-business-house",
-    "version": "1.0.4",
+    "version": "1.0.5",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "jbusinesshouse",
@@ -22,7 +22,7 @@
       },
       "predictiveBackGestureEnabled": false,
       "package": "com.jbh.internationallimited",
-      "versionCode": 6
+      "versionCode": 7
     },
     "web": {
       "output": "static",
