@@ -1,5 +1,5 @@
 import { showAppAlert } from '@/context/AppAlertContext';
-import { supabase } from '@/lib/supabase'; // 👈 make sure path is correct
+import { submitSupport } from '@/lib/catalogApi';
 import { styles } from '@/styles/support';
 import { useNavigation } from 'expo-router';
 import React, { useState } from 'react';
@@ -30,31 +30,10 @@ const Support = () => {
         try {
             setSubmitting(true)
 
-            // 🔐 Get logged-in user
-            const { data: userData, error: userError } = await supabase.auth.getUser()
-
-            if (userError || !userData.user) {
-                throw new Error('User not authenticated')
-            }
-
-            const userId = userData.user.id
-
-            // 📩 Insert support request
-            const { error: insertError } = await supabase
-                .from('support_requests')
-                .insert({
-                    user_id: userId,
-                    subject: subject.trim(),
-                    message: message.trim(),
-                    // is_read & status handled by default in DB
-                })
-
-            if (insertError) {
-                if (__DEV__) {
-                    console.error('Insert error:', insertError)
-                }
-                throw insertError
-            }
+            await submitSupport({
+                subject: subject.trim(),
+                message: message.trim(),
+            })
 
             showAppAlert(
                 'অনুরোধ জমা হয়েছে',

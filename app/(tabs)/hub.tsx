@@ -1,6 +1,7 @@
 import ConfirmModal from "@/components/modal/ConfirmModal";
 import { showAppAlert } from "@/context/AppAlertContext";
 import { useProfile } from "@/hooks/useProfile";
+import { goToSignIn } from "@/lib/guestAuth";
 import {
   PLATFORM_BKASH_NUMBER,
   PLATFORM_FEE_MAX_DUE,
@@ -45,6 +46,12 @@ export default function HubTab() {
       <View style={styles.center}>
         <Text style={styles.emptyTitle}>সাইন ইন প্রয়োজন</Text>
         <Text style={styles.emptyBody}>এই তথ্য দেখতে লগ ইন করুন।</Text>
+        <Pressable
+          style={styles.signInBtn}
+          onPress={() => goToSignIn("/(tabs)/hub")}
+        >
+          <Text style={styles.signInBtnText}>Sign In</Text>
+        </Pressable>
       </View>
     );
   }
@@ -526,6 +533,18 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#6B7280",
     textAlign: "center",
+  },
+  signInBtn: {
+    marginTop: 16,
+    backgroundColor: PRIMARY,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  signInBtnText: {
+    color: "#ffffff",
+    fontWeight: "600",
+    fontSize: 15,
   },
   header: {
     backgroundColor: "#000000",

@@ -1,16 +1,12 @@
 import { useUser } from "@/context/UserContext";
-import {
-  BATCH_SIZE,
-  fisherYatesShuffle,
-  formatProducts,
-  ProductFeedItem,
-} from "@/lib/productFeed";
-import { supabase } from "@/lib/supabase";
+import { fetchFeedBatch, fetchFeedIds } from "@/lib/catalogApi";
+import { BATCH_SIZE, ProductFeedItem } from "@/lib/productFeed";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 type UseShuffledProductFeedOptions = {
   categoryId?: string;
   subcategoryId?: string;
+  sellerId?: string;
   /** Product IDs already shown as sponsored — excluded from organic feed. */
   excludeProductIds?: string[];
   enabled?: boolean;
@@ -19,10 +15,11 @@ type UseShuffledProductFeedOptions = {
 export function useShuffledProductFeed({
   categoryId,
   subcategoryId,
+  sellerId,
   excludeProductIds = [],
   enabled = true,
 }: UseShuffledProductFeedOptions = {}) {
-  const { user, loading: authLoading } = useUser();
+  const { loading: authLoading } = useUser();
 
   const [shuffledIds, setShuffledIds] = useState<string[]>([]);
   const [visibleProducts, setVisibleProducts] = useState<ProductFeedItem[]>([]);
@@ -34,7 +31,6 @@ export function useShuffledProductFeed({
 
   const shuffledIdsRef = useRef<string[]>([]);
   const currentIndexRef = useRef(0);
-  const blockedUserIdsRef = useRef<string[]>([]);
   const isFetchingBatchRef = useRef(false);
   const excludeIdsKey = excludeProductIds.slice().sort().join("|");
   const excludeIdsRef = useRef<Set<string>>(new Set(excludeProductIds));
@@ -42,18 +38,6 @@ export function useShuffledProductFeed({
   useEffect(() => {
     excludeIdsRef.current = new Set(excludeProductIds);
   }, [excludeIdsKey, excludeProductIds]);
-
-  const resolveBlockedUserIds = useCallback(async (): Promise<string[]> => {
-    if (!user) return [];
-
-    const { data: blockData, error: blockError } = await supabase
-      .from("blocks")
-      .select("blocked_id")
-      .eq("blocker_id", user.id);
-
-    if (blockError || !blockData) return [];
-    return blockData.map((b: { blocked_id: string }) => b.blocked_id);
-  }, [user]);
 
   const fetchNextBatch = useCallback(async () => {
     const ids = shuffledIdsRef.current;
@@ -69,35 +53,8 @@ export function useShuffledProductFeed({
       const batchIds = ids.slice(startIndex, startIndex + BATCH_SIZE);
       if (batchIds.length === 0) return;
 
-      const { data, error } = await supabase
-        .from("products")
-        .select(
-          `
-          id,
-          name,
-          price,
-          moq,
-          seller_id,
-          product_images (
-            image_url,
-            is_main
-          )
-        `
-        )
-        .in("id", batchIds)
-        .eq("is_deleted", false)
-        .eq("status", "active");
-
-      if (error) throw error;
-
-      const productMap = new Map(
-        (data ?? []).map((product: any) => [product.id, product])
-      );
-      const orderedData = batchIds
-        .map((id) => productMap.get(id))
-        .filter(Boolean);
-
-      const formatted = formatProducts(orderedData, blockedUserIdsRef.current);
+      const { products } = await fetchFeedBatch(batchIds);
+      const formatted = (products ?? []) as ProductFeedItem[];
 
       const nextIndex = startIndex + BATCH_SIZE;
       currentIndexRef.current = nextIndex;
@@ -115,31 +72,15 @@ export function useShuffledProductFeed({
 
   const initializeFeed = useCallback(async () => {
     try {
-      const blockedUserIds = await resolveBlockedUserIds();
-      blockedUserIdsRef.current = blockedUserIds;
+      const { ids: rawIds } = await fetchFeedIds({
+        categoryId,
+        subcategoryId,
+        sellerId,
+        excludeProductIds: [...excludeIdsRef.current],
+      });
 
-      let idQuery = supabase
-        .from("products")
-        .select("id")
-        .eq("is_deleted", false)
-        .eq("status", "active");
-
-      if (categoryId) {
-        idQuery = idQuery.eq("category_id", categoryId);
-      }
-
-      if (subcategoryId) {
-        idQuery = idQuery.eq("subcategory_id", subcategoryId);
-      }
-
-      const { data, error } = await idQuery;
-
-      if (error) throw error;
-
-      const ids = fisherYatesShuffle(
-        (data ?? [])
-          .map((row: { id: string }) => row.id)
-          .filter((id: string) => !excludeIdsRef.current.has(id))
+      const ids = (rawIds ?? []).filter(
+        (id: string) => !excludeIdsRef.current.has(id)
       );
 
       shuffledIdsRef.current = ids;
@@ -158,7 +99,7 @@ export function useShuffledProductFeed({
         console.log("Error initializing product feed:", error);
       }
     }
-  }, [categoryId, subcategoryId, excludeIdsKey, resolveBlockedUserIds, fetchNextBatch]);
+  }, [categoryId, subcategoryId, sellerId, excludeIdsKey, fetchNextBatch]);
 
   useEffect(() => {
     if (!enabled || authLoading) return;

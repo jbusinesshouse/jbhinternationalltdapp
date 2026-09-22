@@ -1,51 +1,39 @@
-import { supabase } from '@/lib/supabase'
-import { useCallback, useEffect, useState } from 'react'
+import { useUser } from "@/context/UserContext";
+import { fetchMyProfile, patchMyProfile } from "@/lib/catalogApi";
+import { useCallback, useEffect, useState } from "react";
 
 export const useProfile = () => {
-    const [profile, setProfile] = useState<any>(null)
-    const [loading, setLoading] = useState(true)
+  const { session, loading: authLoading } = useUser();
+  const [profile, setProfile] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
 
-    const fetchProfile = useCallback(async () => {
-        setLoading(true)
-        const {
-            data: { user },
-        } = await supabase.auth.getUser()
-
-        if (!user) {
-            setLoading(false)
-            return
-        }
-
-        const { data, error } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('id', user.id)
-            .single()
-
-        if (!error) setProfile(data)
-        setLoading(false)
-    }, [])
-
-    useEffect(() => {
-        fetchProfile()
-    }, [fetchProfile])
-
-    const updateName = async (full_name: string) => {
-        const {
-            data: { user },
-        } = await supabase.auth.getUser()
-
-        if (!user) throw new Error('No user')
-
-        const { error } = await supabase
-            .from('profiles')
-            .update({ full_name })
-            .eq('id', user.id)
-
-        if (error) throw error
-
-        setProfile((prev: any) => ({ ...prev, full_name }))
+  const fetchProfile = useCallback(async () => {
+    if (!session) {
+      setProfile(null);
+      setLoading(false);
+      return;
     }
 
-    return { profile, loading, updateName, refetch: fetchProfile }
-}
+    setLoading(true);
+    try {
+      const res = await fetchMyProfile();
+      setProfile(res.profile);
+    } catch {
+      setProfile(null);
+    }
+    setLoading(false);
+  }, [session]);
+
+  useEffect(() => {
+    if (authLoading) return;
+    fetchProfile();
+  }, [authLoading, fetchProfile]);
+
+  const updateName = async (full_name: string) => {
+    const res = await patchMyProfile({ full_name });
+    if (res.profile) setProfile(res.profile);
+    else setProfile((prev: any) => ({ ...prev, full_name }));
+  };
+
+  return { profile, loading: authLoading || loading, updateName, refetch: fetchProfile };
+};

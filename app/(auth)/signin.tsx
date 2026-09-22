@@ -1,7 +1,8 @@
 import { showAppAlert } from '@/context/AppAlertContext'
+import { setPendingReturnTo } from '@/lib/guestAuth'
 import { supabase } from '@/lib/supabase'
-import { useRouter } from 'expo-router'
-import React, { useState } from 'react'
+import { useLocalSearchParams, useRouter } from 'expo-router'
+import React, { useEffect, useState } from 'react'
 import {
     ActivityIndicator,
     ScrollView,
@@ -14,9 +15,16 @@ import {
 
 export default function Signin() {
     const router = useRouter()
+    const { returnTo } = useLocalSearchParams<{ returnTo?: string }>()
     const [loading, setLoading] = useState(false)
     const [email, setEmail] = useState('')
     const [password, setPassword] = useState('')
+
+    useEffect(() => {
+        if (typeof returnTo === 'string' && returnTo.trim()) {
+            setPendingReturnTo(returnTo)
+        }
+    }, [returnTo])
 
     const handleSignin = async () => {
         if (!email || !password) {
@@ -48,6 +56,11 @@ export default function Signin() {
         } finally {
             setLoading(false)
         }
+    }
+
+    const handleContinueAsGuest = () => {
+        setPendingReturnTo(null)
+        router.replace('/(tabs)')
     }
 
     return (
@@ -87,9 +100,12 @@ export default function Signin() {
                     )}
                 </TouchableOpacity>
 
-                {/* <TouchableOpacity style={styles.linkButton}>
-                        <Text style={styles.linkText}>Forgot Password?</Text>
-                    </TouchableOpacity> */}
+                <TouchableOpacity
+                    style={styles.guestButton}
+                    onPress={handleContinueAsGuest}
+                >
+                    <Text style={styles.guestButtonText}>Continue as Guest</Text>
+                </TouchableOpacity>
 
                 <View style={styles.divider} />
 
@@ -151,13 +167,15 @@ const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: '600',
     },
-    linkButton: {
+    guestButton: {
         alignItems: 'center',
         marginTop: 16,
+        paddingVertical: 12,
     },
-    linkText: {
-        color: '#666',
-        fontSize: 14,
+    guestButtonText: {
+        color: '#f5832b',
+        fontSize: 15,
+        fontWeight: '600',
     },
     divider: {
         height: 1,

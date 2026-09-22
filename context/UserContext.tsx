@@ -1,3 +1,5 @@
+import { fetchMyProfile } from '@/lib/catalogApi'
+import { unregisterPushTokenFromBackend } from '@/lib/pushNotifications'
 import { supabase } from '@/lib/supabase'
 import { Session, User } from '@supabase/supabase-js'
 import { createContext, useContext, useEffect, useState } from 'react'
@@ -9,6 +11,10 @@ type Profile = {
     address?: string | null
     avatar_url?: string | null
     status: 'active' | 'freeze' | 'restricted'
+    store_type?: string | null
+    store_name?: string | null
+    phone?: string | null
+    [key: string]: unknown
 }
 
 type UserContextType = {
@@ -33,22 +39,10 @@ export const UserProvider = ({ children }: { children: React.ReactNode }) => {
     const [loading, setLoading] = useState(true)
     const [isSettingUp, setIsSettingUp] = useState(false)
 
-    const fetchProfile = async (userId: string) => {
+    const fetchProfile = async (_userId?: string) => {
         try {
-            const { data, error } = await supabase
-                .from('profiles')
-                .select('*')
-                .eq('id', userId)
-                .single()
-
-            if (!error) {
-                setProfile(data)
-            } else {
-                if (__DEV__) {
-                    console.warn('Profile not found or error:', error.message)
-                }
-                setProfile(null)
-            }
+            const res = await fetchMyProfile()
+            setProfile(res.profile)
         } catch (err) {
             if (__DEV__) {
                 console.warn('fetchProfile failed:', err)
@@ -92,6 +86,7 @@ export const UserProvider = ({ children }: { children: React.ReactNode }) => {
     }, [])
 
     const signOut = async () => {
+        await unregisterPushTokenFromBackend()
         await supabase.auth.signOut()
     }
 

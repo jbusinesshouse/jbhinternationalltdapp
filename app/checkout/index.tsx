@@ -3,6 +3,7 @@ import DeliveryAddressFormFields, {
     emptyAddressForm,
 } from "@/components/delivery/DeliveryAddressFormFields";
 import { showAppAlert } from "@/context/AppAlertContext";
+import { useUser } from "@/context/UserContext";
 import { useProfile } from "@/hooks/useProfile";
 import {
     createDeliveryAddress,
@@ -12,6 +13,8 @@ import {
     setDefaultDeliveryAddress,
     toOrderDeliverySnapshot,
 } from "@/lib/deliveryAddresses";
+import { placeOrder } from "@/lib/catalogApi";
+import { goToSignIn } from "@/lib/guestAuth";
 import { supabase } from "@/lib/supabase";
 import { styles } from "@/styles/profile";
 import Checkbox from "expo-checkbox";
@@ -61,9 +64,17 @@ type AddressMode = "store" | "saved" | "custom";
 const Checkout = () => {
     const navigation = useNavigation();
     const router = useRouter();
+    const { user, loading: authLoading } = useUser();
     const { profile } = useProfile();
 
     const { data } = useLocalSearchParams<{ data: string }>();
+
+    useEffect(() => {
+        if (authLoading) return;
+        if (!user) {
+            goToSignIn();
+        }
+    }, [authLoading, user]);
 
     const parsed: CheckoutData | null = useMemo(() => {
         if (!data) return null;
@@ -163,6 +174,14 @@ const Checkout = () => {
         };
     }, [profile?.id, profile?.default_delivery_address_id]);
 
+    if (authLoading || !user) {
+        return (
+            <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+                <ActivityIndicator size="large" color="#f5832b" />
+            </View>
+        );
+    }
+
     if (!parsed) {
         return (
             <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
@@ -205,31 +224,6 @@ const Checkout = () => {
             return null;
         }
         return toOrderDeliverySnapshot(customForm);
-    };
-
-    /* ================= 🔔 SEND NOTIFICATION ================= */
-
-    const sendNotification = async (
-        userId: string,
-        title: string,
-        message: string,
-        orderId: string
-    ) => {
-        const { error } = await supabase.from("notifications").insert([
-            {
-                user_id: userId,
-                title,
-                message,
-                order_id: orderId,
-                is_read: false,
-            },
-        ]);
-
-        if (error) {
-            if (__DEV__) {
-                console.log("Notification error:", error);
-            }
-        }
     };
 
     /* ================= SUBMIT ================= */
@@ -296,48 +290,19 @@ const Checkout = () => {
                         variant_id: variant.id,
                         size_id: sizeId,
                         quantity: qty,
-                        product_name_snapshot: parsed.product.name,
-                        price_snapshot: parsed.product.price,
                     });
                 });
             });
 
-            const { data: orderId, error } = await supabase.rpc("place_order", {
-                p_user_id: user.id,
-                p_full_name: form.full_name,
-                p_phone: form.phone,
-                p_email: form.email || null,
-                p_city: delivery.city,
-                p_address: delivery.delivery_address,
-                p_product_id: parsed.product.id,
-                p_items: orderItems,
+            await placeOrder({
+                full_name: form.full_name,
+                phone: form.phone,
+                email: form.email || null,
+                city: delivery.city,
+                address: delivery.delivery_address,
+                product_id: parsed.product.id,
+                items: orderItems,
             });
-
-            if (error) throw error;
-
-            const { data: productData } = await supabase
-                .from("products")
-                .select("seller_id")
-                .eq("id", parsed.product.id)
-                .single();
-
-            const sellerId = productData?.seller_id;
-
-            if (sellerId) {
-                await sendNotification(
-                    sellerId,
-                    "New Order Received",
-                    `${form.full_name} placed an order`,
-                    orderId
-                );
-            }
-
-            await sendNotification(
-                user.id,
-                "Order Confirmed",
-                `Your order for ${parsed.product.name} has been placed`,
-                orderId
-            );
 
             showAppAlert("সফল", "আপনার অর্ডার সফলভাবে প্লেস হয়েছে।");
             router.replace("/");

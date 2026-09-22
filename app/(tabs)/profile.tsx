@@ -3,6 +3,12 @@ import { showAppAlert } from '@/context/AppAlertContext'
 import { useUser } from '@/context/UserContext'
 import { useAuth } from '@/hooks/useAuth'
 import { useProfile } from '@/hooks/useProfile'
+import {
+    patchMyProfile,
+    uploadAvatar as uploadAvatarApi,
+    upsertMyProfile,
+} from '@/lib/catalogApi'
+import { goToSignIn } from '@/lib/guestAuth'
 import { compressAvatarImage } from '@/lib/compressImage'
 import {
     deleteLocalImageUris,
@@ -10,11 +16,15 @@ import {
     isPreparedImageUri,
     preparePickedAvatarImage,
 } from '@/lib/pickedImage'
-import { supabase } from '@/lib/supabase'
+import {
+    enablePushNotificationsFromSettings,
+    getNotificationPermissionStatus,
+    openSystemNotificationSettings,
+} from '@/lib/pushNotifications'
 import { styles } from '@/styles/profile'
 import { Picker } from '@react-native-picker/picker'
 import * as ImagePicker from 'expo-image-picker'
-import { type Href, useNavigation, useRouter } from 'expo-router'
+import { type Href, useFocusEffect, useNavigation, useRouter } from 'expo-router'
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import {
     ActivityIndicator,
@@ -134,23 +144,15 @@ const IncompleteProfile = ({ onSaved }: { onSaved: () => void }) => {
 
         setSaving(true)
         try {
-            const { data: { user } } = await supabase.auth.getUser()
-            if (!user) throw new Error('Not logged in')
-
-            const { error } = await supabase
-                .from('profiles')
-                .update({
-                    full_name,
-                    phone,
-                    store_name,
-                    store_type,
-                    address,
-                    district,
-                    upazila,
-                })
-                .eq('id', user.id)
-
-            if (error) throw error
+            await upsertMyProfile({
+                full_name,
+                phone,
+                store_name,
+                store_type,
+                address,
+                district,
+                upazila,
+            })
 
             showAppAlert('সফল', 'প্রোফাইল সম্পন্ন হয়েছে!')
             onSaved()
@@ -212,7 +214,7 @@ const IncompleteProfile = ({ onSaved }: { onSaved: () => void }) => {
                 style={inputStyle}
             />
 
-            {/* STORE TYPE */}
+            {/* STORE TYPE — allowed on first PUT completion; locked thereafter by API */}
             <View style={pickerStyle}>
                 <Picker
                     selectedValue={form.store_type}
@@ -344,8 +346,24 @@ const Profile = () => {
     // 🔹 SAFETY CHECK
     if (!profile) {
         return (
-            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-                <Text>Failed to load profile</Text>
+            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 24 }}>
+                <Text style={{ fontSize: 18, fontWeight: '600', marginBottom: 8, textAlign: 'center' }}>
+                    সাইন ইন প্রয়োজন
+                </Text>
+                <Text style={{ color: '#6b7280', marginBottom: 16, textAlign: 'center' }}>
+                    প্রোফাইল দেখতে লগ ইন করুন।
+                </Text>
+                <Pressable
+                    onPress={() => goToSignIn('/(tabs)/profile')}
+                    style={{
+                        backgroundColor: '#f5832b',
+                        paddingHorizontal: 24,
+                        paddingVertical: 12,
+                        borderRadius: 8,
+                    }}
+                >
+                    <Text style={{ color: '#fff', fontWeight: '600' }}>Sign In</Text>
+                </Pressable>
             </View>
         )
     }
@@ -376,37 +394,14 @@ const Profile = () => {
     }
 
     const uploadAvatar = async (uri: string) => {
-        const userId = profile.id
-        const filePath = `${userId}.jpg`
-
         const compressed = isPreparedImageUri(uri)
             ? { uri }
             : await compressAvatarImage(uri)
 
-        const response = await fetch(compressed.uri)
-        const arrayBuffer = await response.arrayBuffer()
+        const uploaded = await uploadAvatarApi(compressed.uri)
+        const publicUrl = `${uploaded.publicUrl}?t=${Date.now()}`
 
-        const { error: uploadError } = await supabase.storage
-            .from('profile-images')
-            .upload(filePath, arrayBuffer, {
-                contentType: 'image/jpeg',
-                upsert: true,
-            })
-
-        if (uploadError) throw uploadError
-
-        const { data } = supabase.storage
-            .from('profile-images')
-            .getPublicUrl(filePath)
-
-        const publicUrl = `${data.publicUrl}?t=${Date.now()}`
-
-        const { error: updateError } = await supabase
-            .from('profiles')
-            .update({ avatar_url: publicUrl })
-            .eq('id', userId)
-
-        if (updateError) throw updateError
+        await patchMyProfile({ avatar_url: publicUrl })
 
         await refetch()
         if (isPreparedImageUri(uri)) {
@@ -552,6 +547,7 @@ const Profile = () => {
                 {/* 🔹 MAIN ACTIONS */}
                 <View style={styles.section}>
                     <ProfileLink title="My Account" link="/account" />
+                    <NotificationPermissionRow />
                 </View>
 
                 <View style={styles.section}>
@@ -648,6 +644,154 @@ const ProductUpComp = ({ title }: { title: string }) => {
                 source={require('@/assets/images/icons/plus.png')}
                 style={styles.linkIcon}
             />
+        </Pressable>
+    )
+}
+
+const NotificationPermissionRow = () => {
+    const [status, setStatus] = useState<
+        'granted' | 'denied' | 'undetermined' | 'unavailable' | 'loading'
+    >('loading')
+    const [busy, setBusy] = useState(false)
+    const askedOnceRef = useRef(false)
+
+    const refresh = async () => {
+        try {
+            const next = await getNotificationPermissionStatus()
+            setStatus(next)
+            return next
+        } catch {
+            setStatus('unavailable')
+            return 'unavailable' as const
+        }
+    }
+
+    useFocusEffect(
+        React.useCallback(() => {
+            let cancelled = false
+
+            const run = async () => {
+                const current = await refresh()
+                if (cancelled || current !== 'undetermined' || askedOnceRef.current) {
+                    return
+                }
+
+                askedOnceRef.current = true
+                setBusy(true)
+                try {
+                    const result = await enablePushNotificationsFromSettings()
+                    if (!cancelled) {
+                        setStatus(result.status)
+                        if (result.status === 'granted') {
+                            showAppAlert(
+                                'Notifications enabled',
+                                'You will get alerts for new orders and updates.'
+                            )
+                        }
+                    }
+                } finally {
+                    if (!cancelled) setBusy(false)
+                }
+            }
+
+            void run()
+            return () => {
+                cancelled = true
+            }
+        }, [])
+    )
+
+    const statusLabel =
+        status === 'granted'
+            ? 'On'
+            : status === 'denied'
+                ? 'Off — tap to open Settings'
+                : status === 'undetermined'
+                    ? 'Off — tap to enable'
+                    : status === 'unavailable'
+                        ? 'Unavailable on this device'
+                        : 'Checking…'
+
+    const handlePress = async () => {
+        if (busy || status === 'loading' || status === 'unavailable') return
+
+        if (status === 'granted') {
+            showAppAlert(
+                'Notifications are on',
+                'You will receive alerts for orders and updates.'
+            )
+            return
+        }
+
+        if (status === 'denied') {
+            showAppAlert(
+                'Enable in Settings',
+                'Notification permission was turned off. Open system Settings to allow alerts for this app.',
+                [
+                    { text: 'Cancel', style: 'cancel' },
+                    {
+                        text: 'Open Settings',
+                        onPress: () => {
+                            void openSystemNotificationSettings()
+                        },
+                    },
+                ]
+            )
+            return
+        }
+
+        askedOnceRef.current = true
+        setBusy(true)
+        try {
+            const result = await enablePushNotificationsFromSettings()
+            setStatus(result.status)
+            if (result.status === 'granted') {
+                showAppAlert(
+                    'Notifications enabled',
+                    'You will get alerts for new orders and updates.'
+                )
+            } else if (result.status === 'denied') {
+                showAppAlert(
+                    'Permission needed',
+                    'Notifications were not allowed. You can enable them later in system Settings.',
+                    [
+                        { text: 'OK', style: 'cancel' },
+                        {
+                            text: 'Open Settings',
+                            onPress: () => {
+                                void openSystemNotificationSettings()
+                            },
+                        },
+                    ]
+                )
+            }
+        } finally {
+            setBusy(false)
+        }
+    }
+
+    return (
+        <Pressable
+            style={styles.linkRow}
+            onPress={() => {
+                void handlePress()
+            }}
+            disabled={busy || status === 'loading'}
+        >
+            <View style={{ flex: 1 }}>
+                <Text style={styles.linkText}>Push notifications</Text>
+                <Text style={{ fontSize: 12, color: '#6B7280', marginTop: 2 }}>
+                    {busy ? 'Updating…' : statusLabel}
+                </Text>
+            </View>
+            {busy || status === 'loading' ? (
+                <ActivityIndicator size="small" color="#f5832b" />
+            ) : (
+                <Image
+                    source={require('@/assets/images/icons/chevron-right.png')}
+                    style={styles.linkIcon}
+                />
+            )}
         </Pressable>
     )
 }

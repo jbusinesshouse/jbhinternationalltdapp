@@ -1,6 +1,7 @@
 import { useChatInbox } from '@/context/ChatInboxContext';
 import { useUser } from '@/context/UserContext';
 import { ChatRoomListItem } from '@/lib/chat';
+import { goToSignIn } from '@/lib/guestAuth';
 import { router } from 'expo-router';
 import React, { useState } from 'react';
 import {
@@ -101,7 +102,15 @@ const Messages = () => {
                         <ActivityIndicator size="large" color="#f5832b" />
                     </View>
                 ) : !user ? (
-                    <Text style={styles.noMessageText}>Sign in to view your messages.</Text>
+                    <View style={styles.guestWrap}>
+                        <Text style={styles.noMessageText}>Sign in to view your messages.</Text>
+                        <Pressable
+                            style={styles.signInBtn}
+                            onPress={() => goToSignIn('/(tabs)/messages')}
+                        >
+                            <Text style={styles.signInBtnText}>Sign In</Text>
+                        </Pressable>
+                    </View>
                 ) : rooms.length > 0 ? (
                     <FlatList
                         data={rooms}
@@ -182,6 +191,25 @@ const styles = StyleSheet.create({
     },
     noMessageText: {
         color: '#9b9b9b',
+        textAlign: 'center',
+    },
+    guestWrap: {
+        flex: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 16,
+        paddingHorizontal: 24,
+    },
+    signInBtn: {
+        backgroundColor: '#f5832b',
+        paddingHorizontal: 24,
+        paddingVertical: 12,
+        borderRadius: 8,
+    },
+    signInBtnText: {
+        color: '#ffffff',
+        fontWeight: '600',
+        fontSize: 15,
     },
     loadingWrapper: {
         flex: 1,

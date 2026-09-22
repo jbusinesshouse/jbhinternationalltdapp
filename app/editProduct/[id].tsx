@@ -2,13 +2,12 @@ import RichTextEditor from '@/components/textEditor/RichTextEditor';
 import { showAppAlert } from '@/context/AppAlertContext';
 import { useUser } from '@/context/UserContext';
 import {
-    parsePositiveInt,
-    parsePositiveNumber,
-    plainTextFromHtml,
-    removeProductStoragePaths,
-    storagePathFromPublicUrl,
-    uploadProductImage,
-} from '@/lib/productMedia';
+    fetchCategories as fetchCategoriesApi,
+    fetchProductDetail,
+    fetchSizes as fetchSizesApi,
+    fetchSubcategories,
+    updateProduct,
+} from '@/lib/catalogApi';
 import {
     deleteLocalImageUris,
     formatImageProcessingError,
@@ -17,7 +16,14 @@ import {
     preparePickedProductImage,
     preparePickedProductImages,
 } from '@/lib/pickedImage';
-import { supabase } from '@/lib/supabase';
+import {
+    parsePositiveInt,
+    parsePositiveNumber,
+    plainTextFromHtml,
+    removeProductStoragePaths,
+    storagePathFromPublicUrl,
+    uploadProductImage,
+} from '@/lib/productMedia';
 import { styles } from '@/styles/productUpload';
 import Feather from '@expo/vector-icons/Feather';
 import { Picker } from '@react-native-picker/picker';
@@ -38,19 +44,17 @@ type SizeEntry = {
     size_id: string;
     label: string;
     stock: string;
-    db_size_id?: string;
 }
 
 type Variant = {
     color: string;
     sizes: SizeEntry[];
-    db_variant_id?: string;
 }
 
 type DbSize = {
     id: string;
     label: string;
-    category: string;
+    category?: string | null;
 }
 
 type Category = {
@@ -61,7 +65,7 @@ type Category = {
 type Subcategory = {
     id: string;
     name: string;
-    category_id: string;
+    category_id?: string;
 }
 
 const MAX_ADDITIONAL_IMAGES = 8;
@@ -81,14 +85,12 @@ const EditProduct = () => {
 
     const [availableSizes, setAvailableSizes] = useState<DbSize[]>([]);
     const [categories, setCategories] = useState<Category[]>([]);
-    const [allSubcategories, setAllSubcategories] = useState<Subcategory[]>([]);
     const [filteredSubcategories, setFilteredSubcategories] = useState<Subcategory[]>([]);
 
     const [mainImage, setMainImage] = useState<string | null>(null);
     const [originalMainImageUrl, setOriginalMainImageUrl] = useState<string | null>(null);
     const [mainImageIsNew, setMainImageIsNew] = useState(false);
-    const [images, setImages] = useState<{ uri: string; isNew: boolean; dbId?: string }[]>([]);
-    const [removedImageIds, setRemovedImageIds] = useState<string[]>([]);
+    const [images, setImages] = useState<{ uri: string; isNew: boolean }[]>([]);
     const [removedImageUrls, setRemovedImageUrls] = useState<string[]>([]);
 
     const [name, setName] = useState('');
@@ -102,23 +104,34 @@ const EditProduct = () => {
     const [subCategoryId, setSubCategoryId] = useState<string | null>(null);
 
     const [variants, setVariants] = useState<Variant[]>([]);
-    const [removedVariantIds, setRemovedVariantIds] = useState<string[]>([]);
 
     useEffect(() => {
-        Promise.all([fetchCategories(), fetchAllSubcategories()]).then(() => {
-            fetchProduct();
-        });
-    }, []);
+        loadInitial();
+    }, [id]);
 
     useEffect(() => {
-        if (parentCategoryId && allSubcategories.length > 0) {
-            setFilteredSubcategories(
-                allSubcategories.filter(s => String(s.category_id) === String(parentCategoryId))
-            );
-        } else {
+        if (!parentCategoryId) {
             setFilteredSubcategories([]);
+            return;
         }
-    }, [parentCategoryId, allSubcategories]);
+
+        let cancelled = false;
+
+        const loadSubs = async () => {
+            try {
+                const data = await fetchSubcategories(parentCategoryId);
+                if (!cancelled) setFilteredSubcategories(data);
+            } catch (error) {
+                if (__DEV__) console.error(error);
+                if (!cancelled) setFilteredSubcategories([]);
+            }
+        };
+
+        loadSubs();
+        return () => {
+            cancelled = true;
+        };
+    }, [parentCategoryId]);
 
     useEffect(() => {
         if (!parentCategory) {
@@ -129,15 +142,14 @@ const EditProduct = () => {
         const requestId = ++sizesRequestIdRef.current;
 
         const run = async () => {
-            const { data, error } = await supabase
-                .from('sizes')
-                .select('id, label, category')
-                .eq('category', parentCategory.toLowerCase())
-                .order('sort_order', { ascending: true });
-
-            if (requestId !== sizesRequestIdRef.current) return;
-            if (!error && data) setAvailableSizes(data as DbSize[]);
-            else setAvailableSizes([]);
+            try {
+                const data = await fetchSizesApi(parentCategory.toLowerCase());
+                if (requestId !== sizesRequestIdRef.current) return;
+                setAvailableSizes(data as DbSize[]);
+            } catch {
+                if (requestId !== sizesRequestIdRef.current) return;
+                setAvailableSizes([]);
+            }
         };
 
         run();
@@ -156,95 +168,69 @@ const EditProduct = () => {
         };
     }, []);
 
-    const fetchCategories = async () => {
-        const { data, error } = await supabase
-            .from('categories')
-            .select('*')
-            .order('name', { ascending: true });
-        if (!error && data) setCategories(data);
-    };
+    const loadInitial = async () => {
+        if (!id) return;
 
-    const fetchAllSubcategories = async () => {
-        const { data, error } = await supabase
-            .from('subcategories')
-            .select('*')
-            .order('name', { ascending: true });
-        if (!error && data) setAllSubcategories(data);
-    };
-
-    const fetchProduct = async () => {
         try {
             setLoading(true);
 
-            const { data: product, error: productError } = await supabase
-                .from('products')
-                .select('*')
-                .eq('id', id)
-                .single();
+            const [cats, detail] = await Promise.all([
+                fetchCategoriesApi(),
+                fetchProductDetail(String(id)),
+            ]);
 
-            if (productError || !product) {
+            setCategories(cats);
+
+            const product = detail.product;
+            if (!product) {
                 showAppAlert('সমস্যা', 'প্রোডাক্ট লোড করা যায়নি।');
                 navigation.goBack();
                 return;
             }
 
             setName(product.name || '');
-            setPrice(String(product.price || ''));
-            setMoq(String(product.moq || ''));
+            setPrice(String(product.price ?? ''));
+            setMoq(String(product.moq ?? ''));
             setDescription(product.description || '');
             setCategory(product.selected_category || '');
             setSubCategoryId(product.subcategory_id || null);
             setParentCategoryId(product.category_id || null);
 
-            const { data: imgData } = await supabase
-                .from('product_images')
-                .select('*')
-                .eq('product_id', id)
-                .order('sort_order', { ascending: true });
+            const matchedCat = cats.find((c) => c.id === product.category_id);
+            if (matchedCat) setParentCategory(matchedCat.name);
 
-            if (imgData) {
-                const main = imgData.find(i => i.is_main);
-                if (main) {
-                    setMainImage(main.image_url);
-                    setOriginalMainImageUrl(main.image_url);
-                }
+            const imgData = [...(product.product_images || [])].sort(
+                (a: any, b: any) => (a.sort_order ?? 0) - (b.sort_order ?? 0)
+            );
 
-                const additional = imgData
-                    .filter(i => !i.is_main)
-                    .map(i => ({ uri: i.image_url, isNew: false, dbId: i.id }));
-                setImages(additional);
+            const main = imgData.find((i: any) => i.is_main);
+            if (main) {
+                setMainImage(main.image_url);
+                setOriginalMainImageUrl(main.image_url);
             }
 
-            const { data: variantData } = await supabase
-                .from('product_variants')
-                .select('*, product_sizes(*)')
-                .eq('product_id', id);
+            setImages(
+                imgData
+                    .filter((i: any) => !i.is_main)
+                    .map((i: any) => ({ uri: i.image_url, isNew: false }))
+            );
 
-            if (variantData) {
-                const mapped: Variant[] = variantData.map(v => ({
-                    db_variant_id: v.id,
-                    color: v.color,
+            const variantData = product.product_variants || [];
+            setVariants(
+                variantData.map((v: any) => ({
+                    color: v.color || '',
                     sizes: (v.product_sizes || []).map((s: any) => ({
-                        db_size_id: s.id,
-                        size_id: s.size_id,
-                        label: s.size,
-                        stock: String(s.stock),
-                    }))
-                }));
-                setVariants(mapped);
-            }
-
-            if (product.category_id) {
-                const { data: catData } = await supabase
-                    .from('categories')
-                    .select('name')
-                    .eq('id', product.category_id)
-                    .single();
-                if (catData) setParentCategory(catData.name);
-            }
-
+                        size_id: s.size_id || s.sizes?.id || '',
+                        label: s.size || s.sizes?.label || '',
+                        stock: String(s.stock ?? ''),
+                    })),
+                }))
+            );
         } catch (err) {
-            showAppAlert('সমস্যা', 'অপ্রত্যাশিত সমস্যা হয়েছে: ' + String(err));
+            showAppAlert(
+                'সমস্যা',
+                formatUploadError(err, 'অপ্রত্যাশিত সমস্যা হয়েছে')
+            );
         } finally {
             setLoading(false);
         }
@@ -311,26 +297,17 @@ const EditProduct = () => {
         if (img.isNew && isPreparedImageUri(img.uri)) {
             void deleteLocalImageUris([img.uri]);
         }
-        if (img.dbId) setRemovedImageIds(prev => [...prev, img.dbId!]);
-        if (!img.isNew) setRemovedImageUrls(prev => [...prev, img.uri]);
-        setImages(prev => prev.filter((_, i) => i !== index));
+        if (!img.isNew) setRemovedImageUrls((prev) => [...prev, img.uri]);
+        setImages((prev) => prev.filter((_, i) => i !== index));
     };
 
     const handleSelectSubcategory = (subcatId: string | null) => {
         setSubCategoryId(subcatId);
-        const selected = filteredSubcategories.find(s => s.id === subcatId);
+        const selected = filteredSubcategories.find((s) => s.id === subcatId);
         setCategory(selected?.name || '');
     };
 
     const handleParentCategoryChange = (item: Category) => {
-        const existingIds = variants
-            .map(v => v.db_variant_id)
-            .filter((vid): vid is string => !!vid);
-
-        if (existingIds.length) {
-            setRemovedVariantIds(prev => [...new Set([...prev, ...existingIds])]);
-        }
-
         setParentCategory(item.name);
         setParentCategoryId(item.id);
         setCategory('');
@@ -339,31 +316,27 @@ const EditProduct = () => {
     };
 
     const addColorVariant = () => {
-        setVariants(prev => [...prev, { color: '', sizes: [] }]);
+        setVariants((prev) => [...prev, { color: '', sizes: [] }]);
     };
 
     const removeColorVariant = (index: number) => {
         showAppAlert('ভ্যারিয়েন্ট ডিলিট করবেন?', 'এই রঙ ও এর সাইজগুলো ডিলিট হয়ে যাবে।', [
             { text: 'বাতিল', style: 'cancel' },
             {
-                text: 'ডিলিট করুন', style: 'destructive', onPress: () => {
-                    const v = variants[index];
-                    if (v.db_variant_id) {
-                        setRemovedVariantIds(prev => [...prev, v.db_variant_id!]);
-                    }
-                    setVariants(prev => prev.filter((_, i) => i !== index));
-                }
-            }
+                text: 'ডিলিট করুন',
+                style: 'destructive',
+                onPress: () => setVariants((prev) => prev.filter((_, i) => i !== index)),
+            },
         ]);
     };
 
     const toggleSizeSelection = (variantIndex: number, size: DbSize) => {
-        setVariants(prev => {
+        setVariants((prev) => {
             const updated = [...prev];
             const variant = updated[variantIndex];
             if (!variant) return prev;
 
-            const existingIndex = variant.sizes.findIndex(s => s.size_id === size.id);
+            const existingIndex = variant.sizes.findIndex((s) => s.size_id === size.id);
 
             if (existingIndex > -1) {
                 variant.sizes.splice(existingIndex, 1);
@@ -371,7 +344,7 @@ const EditProduct = () => {
                 variant.sizes.push({
                     size_id: size.id,
                     label: size.label,
-                    stock: ''
+                    stock: '',
                 });
             }
             return updated;
@@ -436,223 +409,93 @@ const EditProduct = () => {
         try {
             const parsedPrice = parsePositiveNumber(price)!;
             const parsedMoq = parsePositiveInt(moq)!;
+            const productId = String(id);
 
-            const { error: productError } = await supabase
-                .from('products')
-                .update({
-                    name: name.trim(),
-                    description: description.trim(),
-                    category_id: parentCategoryId,
-                    selected_category: category.trim(),
-                    subcategory_id: subCategoryId,
-                    price: parsedPrice,
-                    moq: parsedMoq,
-                })
-                .eq('id', id);
-
-            if (productError) {
-                showAppAlert('সমস্যা', 'প্রোডাক্ট আপডেট হয়নি: ' + productError.message);
-                return;
-            }
+            const imagePayload: {
+                image_url: string;
+                is_main: boolean;
+                sort_order: number;
+            }[] = [];
 
             if (mainImageIsNew && mainImage) {
-                const uploaded = await uploadProductImage(mainImage, `products/${id}/main`);
-                newlyUploadedPaths.push(uploaded.path);
-
-                const { error: deleteMainError } = await supabase
-                    .from('product_images')
-                    .delete()
-                    .eq('product_id', id)
-                    .eq('is_main', true);
-
-                if (deleteMainError) {
-                    throw new Error(deleteMainError.message || 'Failed to replace main image');
-                }
-
-                const { error: insertMainError } = await supabase
-                    .from('product_images')
-                    .insert({
-                        product_id: id,
-                        image_url: uploaded.publicUrl,
-                        is_main: true,
-                        sort_order: 0,
-                    });
-
-                if (insertMainError) {
-                    throw new Error(insertMainError.message || 'Failed to save main image');
-                }
-
-                const oldMainPath = originalMainImageUrl
-                    ? storagePathFromPublicUrl(originalMainImageUrl)
-                    : null;
-                if (oldMainPath) {
-                    await removeProductStoragePaths([oldMainPath]);
-                }
-            }
-
-            if (removedImageIds.length > 0) {
-                const { error: removeImgError } = await supabase
-                    .from('product_images')
-                    .delete()
-                    .in('id', removedImageIds);
-
-                if (removeImgError) {
-                    throw new Error(removeImgError.message || 'Failed to remove images');
-                }
-
-                const paths = removedImageUrls
-                    .map(storagePathFromPublicUrl)
-                    .filter((p): p is string => !!p);
-                await removeProductStoragePaths(paths);
-            }
-
-            const newAdditional = images.filter(i => i.isNew);
-            for (let i = 0; i < newAdditional.length; i++) {
                 const uploaded = await uploadProductImage(
-                    newAdditional[i].uri,
-                    `products/${id}/additional`
+                    mainImage,
+                    `products/${productId}/main`
                 );
                 newlyUploadedPaths.push(uploaded.path);
+                imagePayload.push({
+                    image_url: uploaded.publicUrl,
+                    is_main: true,
+                    sort_order: 0,
+                });
+            } else {
+                imagePayload.push({
+                    image_url: mainImage!,
+                    is_main: true,
+                    sort_order: 0,
+                });
+            }
 
-                const { error: insertAdditionalError } = await supabase
-                    .from('product_images')
-                    .insert({
-                        product_id: id,
+            for (let i = 0; i < images.length; i++) {
+                const img = images[i];
+                if (img.isNew) {
+                    const uploaded = await uploadProductImage(
+                        img.uri,
+                        `products/${productId}/additional`
+                    );
+                    newlyUploadedPaths.push(uploaded.path);
+                    imagePayload.push({
                         image_url: uploaded.publicUrl,
                         is_main: false,
-                        sort_order: 99 + i,
+                        sort_order: i + 1,
                     });
-
-                if (insertAdditionalError) {
-                    throw new Error(
-                        insertAdditionalError.message || 'Failed to save additional image'
-                    );
-                }
-            }
-
-            if (removedVariantIds.length > 0) {
-                const { error: removeVariantError } = await supabase
-                    .from('product_variants')
-                    .delete()
-                    .in('id', removedVariantIds);
-
-                if (removeVariantError) {
-                    throw new Error(
-                        removeVariantError.message || 'Failed to remove old variants'
-                    );
-                }
-            }
-
-            for (const variant of variants) {
-                let variantId = variant.db_variant_id;
-
-                if (variantId) {
-                    const { error: updateVariantError } = await supabase
-                        .from('product_variants')
-                        .update({ color: variant.color.trim() })
-                        .eq('id', variantId);
-
-                    if (updateVariantError) {
-                        throw new Error(
-                            updateVariantError.message || `Failed to update ${variant.color}`
-                        );
-                    }
                 } else {
-                    const { data: newVariant, error: vErr } = await supabase
-                        .from('product_variants')
-                        .insert({
-                            product_id: id,
-                            color: variant.color.trim()
-                        })
-                        .select('id')
-                        .single();
-
-                    if (vErr || !newVariant) {
-                        throw new Error(
-                            vErr?.message || `Failed to create color ${variant.color}`
-                        );
-                    }
-
-                    variantId = newVariant.id;
+                    imagePayload.push({
+                        image_url: img.uri,
+                        is_main: false,
+                        sort_order: i + 1,
+                    });
                 }
+            }
 
-                const { data: existingSizes, error: existingSizesError } = await supabase
-                    .from('product_sizes')
-                    .select('id')
-                    .eq('variant_id', variantId);
+            const variantPayload = variants.map((variant) => ({
+                color: variant.color.trim(),
+                sizes: variant.sizes.map((size) => ({
+                    size_id: size.size_id,
+                    size: size.label,
+                    stock: parsePositiveInt(size.stock)!,
+                })),
+            }));
 
-                if (existingSizesError) {
-                    throw new Error(existingSizesError.message || 'Failed to load sizes');
-                }
+            await updateProduct(productId, {
+                name: name.trim(),
+                description: description.trim(),
+                category_id: parentCategoryId,
+                selected_category: category.trim(),
+                subcategory_id: subCategoryId,
+                price: parsedPrice,
+                moq: parsedMoq,
+                images: imagePayload,
+                variants: variantPayload,
+            });
 
-                const existingIds = new Set(existingSizes?.map(s => s.id) || []);
-                const incomingIds = new Set<string>();
-
-                for (const size of variant.sizes) {
-                    const stock = parsePositiveInt(size.stock)!;
-
-                    if (size.db_size_id) {
-                        incomingIds.add(size.db_size_id);
-
-                        const { error: sizeUpdateError } = await supabase
-                            .from('product_sizes')
-                            .update({
-                                size: size.label,
-                                size_id: size.size_id,
-                                stock,
-                            })
-                            .eq('id', size.db_size_id);
-
-                        if (sizeUpdateError) {
-                            throw new Error(
-                                sizeUpdateError.message ||
-                                `Failed to update size ${size.label}`
-                            );
-                        }
-                    } else {
-                        const { data: newSize, error: sizeInsertError } = await supabase
-                            .from('product_sizes')
-                            .insert({
-                                variant_id: variantId,
-                                size: size.label,
-                                size_id: size.size_id,
-                                stock,
-                            })
-                            .select('id')
-                            .single();
-
-                        if (sizeInsertError || !newSize) {
-                            throw new Error(
-                                sizeInsertError?.message ||
-                                `Failed to add size ${size.label}`
-                            );
-                        }
-
-                        incomingIds.add(newSize.id);
-                    }
-                }
-
-                for (const existingId of existingIds) {
-                    if (!incomingIds.has(existingId)) {
-                        const { error: sizeDeleteError } = await supabase
-                            .from('product_sizes')
-                            .delete()
-                            .eq('id', existingId);
-
-                        if (sizeDeleteError) {
-                            throw new Error(
-                                sizeDeleteError.message || 'Failed to remove a size'
-                            );
-                        }
-                    }
-                }
+            const pathsToRemove: string[] = [];
+            if (mainImageIsNew && originalMainImageUrl) {
+                const oldMainPath = storagePathFromPublicUrl(originalMainImageUrl);
+                if (oldMainPath) pathsToRemove.push(oldMainPath);
+            }
+            for (const url of removedImageUrls) {
+                const path = storagePathFromPublicUrl(url);
+                if (path) pathsToRemove.push(path);
+            }
+            if (pathsToRemove.length) {
+                await removeProductStoragePaths(pathsToRemove);
             }
 
             showAppAlert('সফল', 'প্রোডাক্ট আপডেট হয়েছে।', [
-                { text: 'ঠিক আছে', onPress: () => navigation.goBack() }
+                { text: 'ঠিক আছে', onPress: () => navigation.goBack() },
             ]);
             void deleteLocalImageUris(localImageUrisRef.current);
-
         } catch (err) {
             if (newlyUploadedPaths.length) {
                 await removeProductStoragePaths(newlyUploadedPaths);
@@ -713,7 +556,7 @@ const EditProduct = () => {
 
                     <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.imageRow}>
                         {images.map((img, i) => (
-                            <View key={img.dbId ?? `${img.uri}-${i}`} style={{ position: 'relative', marginRight: 8 }}>
+                            <View key={`${img.uri}-${i}`} style={{ position: 'relative', marginRight: 8 }}>
                                 <Image source={{ uri: img.uri }} style={styles.thumb} />
                                 <Pressable
                                     onPress={() => removeAdditionalImage(i)}
@@ -798,7 +641,7 @@ const EditProduct = () => {
                 <View style={styles.section}>
                     <Text style={styles.sectionTitle}>Inventory Variants</Text>
                     {variants.map((variant, vIdx) => (
-                        <View key={variant.db_variant_id ?? `new-${vIdx}`} style={styles.variantBox}>
+                        <View key={`variant-${vIdx}`} style={styles.variantBox}>
                             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
                                 <TextInput
                                     placeholder="Color (e.g. Red)"

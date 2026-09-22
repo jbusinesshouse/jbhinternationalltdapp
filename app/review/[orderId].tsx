@@ -147,42 +147,12 @@ const WriteReview = () => {
     setImages((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const markReviewNotificationDone = async (userId: string) => {
-    try {
-      await supabase
-        .from("notifications")
-        .update({ action_completed: true, is_read: true })
-        .eq("order_id", orderId)
-        .eq("user_id", userId)
-        .eq("type", "order_review_request");
-    } catch (err) {
-      if (__DEV__) {
-        console.warn("[WriteReview] mark notification failed:", err);
-      }
-    }
+  const markReviewNotificationDone = async (_userId: string) => {
+    // Server marks order_review_request complete on POST /reviews
   };
 
   const notifySellerOfReview = async () => {
-    if (!sellerId || !orderId) return;
-
-    try {
-      await supabase.from("notifications").insert([
-        {
-          user_id: sellerId,
-          title: "New product review",
-          message: productName
-            ? `A buyer left a ${rating}-star review on ${productName}.`
-            : `A buyer left a ${rating}-star review on your product.`,
-          type: "product_review",
-          order_id: orderId,
-          is_read: false,
-        },
-      ]);
-    } catch (err) {
-      if (__DEV__) {
-        console.warn("[WriteReview] seller notify failed:", err);
-      }
-    }
+    // Seller notification is handled server-side when reviews are submitted via BFF
   };
 
   const handleSubmit = async () => {

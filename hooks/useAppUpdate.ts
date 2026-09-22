@@ -1,4 +1,3 @@
-import Constants from 'expo-constants'
 import { useEffect } from 'react'
 import { InteractionManager, Platform } from 'react-native'
 
@@ -15,7 +14,6 @@ export default function useAppUpdate() {
                 if (cancelled) return
 
                 if (Platform.OS !== 'android') return
-                if (Constants.appOwnership === 'expo') return
 
                 try {
                     const InAppUpdates = await import('expo-in-app-updates')

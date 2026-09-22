@@ -1,5 +1,6 @@
 import { UserContext } from '@/context/UserContext'
-import { useRootNavigationState, useRouter, useSegments } from 'expo-router'
+import { consumePendingReturnTo, isPublicRoute, setPendingReturnTo } from '@/lib/guestAuth'
+import { type Href, useRootNavigationState, useRouter, useSegments } from 'expo-router'
 import { useContext, useEffect } from 'react'
 
 export const useAuth = () => {
@@ -24,11 +25,17 @@ export const useProtectedRoute = () => {
         if (loading || isSettingUp) return
 
         const inAuthGroup = segments[0] === '(auth)'
+        const canBrowseAsGuest = isPublicRoute(segments)
 
-        if (!isAuthenticated && !inAuthGroup) {
+        if (!isAuthenticated && !canBrowseAsGuest) {
+            const path = `/${segments.join('/')}`
+            if (path !== '/' && !path.includes('[')) {
+                setPendingReturnTo(path)
+            }
             router.replace('/(auth)/signin')
         } else if (isAuthenticated && inAuthGroup) {
-            router.replace('/(tabs)')
+            const returnTo = consumePendingReturnTo()
+            router.replace((returnTo || '/(tabs)') as Href)
         }
     }, [navigationReady, isAuthenticated, loading, isSettingUp, segments, router])
 

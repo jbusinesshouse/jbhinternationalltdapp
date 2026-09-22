@@ -1,5 +1,6 @@
 import ConfirmModal from "@/components/modal/ConfirmModal";
 import { showAppAlert } from "@/context/AppAlertContext";
+import { fetchMyProfile } from "@/lib/catalogApi";
 import {
   fetchMyLatestReferralCreatorApplication,
   fetchMyReferralDashboard,
@@ -10,7 +11,6 @@ import {
   storeTypeLabel,
   submitReferralCreatorApplication,
 } from "@/lib/referralCreatorApplications";
-import { supabase } from "@/lib/supabase";
 import { styles } from "@/styles/support";
 import { useNavigation } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
@@ -66,22 +66,9 @@ const ContentCreatorReferral = () => {
     try {
       setLoading(true);
 
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser();
-
-      if (userError || !user) {
-        throw new Error("User not authenticated");
-      }
-
-      const [{ data: profile }, application] = await Promise.all([
-        supabase
-          .from("profiles")
-          .select("full_name, phone")
-          .eq("id", user.id)
-          .single(),
-        fetchMyLatestReferralCreatorApplication(user.id),
+      const [{ profile }, application] = await Promise.all([
+        fetchMyProfile(),
+        fetchMyLatestReferralCreatorApplication(),
       ]);
 
       if (profile?.full_name) setFullName(profile.full_name);
@@ -89,7 +76,7 @@ const ContentCreatorReferral = () => {
       setLatestApplication(application);
 
       if (application?.status === "approved") {
-        const dash = await fetchMyReferralDashboard(user.id);
+        const dash = await fetchMyReferralDashboard();
         setDashboard(dash);
       } else {
         setDashboard(null);
@@ -138,17 +125,7 @@ const ContentCreatorReferral = () => {
     try {
       setSubmitting(true);
 
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser();
-
-      if (userError || !user) {
-        throw new Error("User not authenticated");
-      }
-
       await submitReferralCreatorApplication({
-        userId: user.id,
         fullName: trimmedName,
         phone: trimmedPhone,
         platform,

@@ -4,7 +4,14 @@ import StoreProductSearch, {
   useStoreProductSearch,
 } from "@/components/StoreProductSearch";
 import { showAppAlert } from "@/context/AppAlertContext";
-import { supabase } from "@/lib/supabase";
+import { useUser } from "@/context/UserContext";
+import { ApiError } from "@/lib/api";
+import {
+  blockUser,
+  fetchPublicProfile,
+  fetchPublicProfileProducts,
+} from "@/lib/catalogApi";
+import { promptLoginRequired } from "@/lib/guestAuth";
 import { styles as sharedStyles } from "@/styles/profile";
 import { router, useLocalSearchParams, useNavigation } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -39,9 +46,27 @@ type StoreProduct = {
   productImg: string | null;
 };
 
+function mapStoreProduct(item: any): StoreProduct {
+  const mainImage = item.product_images?.find(
+    (img: { is_main: boolean }) => img.is_main === true
+  );
+  return {
+    id: item.id,
+    name: item.name,
+    price: item.price,
+    moq: item.moq ?? 0,
+    productImg:
+      item.productImg ??
+      mainImage?.image_url ??
+      item.product_images?.[0]?.image_url ??
+      null,
+  };
+}
+
 const PublicProfile = () => {
   const { id } = useLocalSearchParams<{ id: string }>();
   const navigation = useNavigation();
+  const { user } = useUser();
 
   const [profile, setProfile] = useState<Profile | null>(null);
   const [products, setProducts] = useState<StoreProduct[]>([]);
@@ -56,82 +81,62 @@ const PublicProfile = () => {
 
   const handleBlockUser = () => {
     setMenuVisible(false);
+    if (!user) {
+      promptLoginRequired(
+        "ইউজার ব্লক করতে সাইন ইন করুন।",
+        `/publicProfile/${id}`
+      );
+      return;
+    }
     setShowBlockModal(true);
   };
 
   const handleReportUser = () => {
     setMenuVisible(false);
+    if (!user) {
+      promptLoginRequired(
+        "রিপোর্ট করতে সাইন ইন করুন।",
+        `/publicProfile/${id}`
+      );
+      return;
+    }
     router.push({
       pathname: "/report/[id]",
       params: { id: id as string, type: "profile" },
     });
   };
 
-  const fetchProducts = useCallback(async (sellerId: string) => {
-    const { data, error } = await supabase
-      .from("products")
-      .select(
-        `
-        id,
-        name,
-        price,
-        moq,
-        product_images (
-          image_url,
-          is_main
-        )
-      `
-      )
-      .eq("seller_id", sellerId)
-      .eq("is_deleted", false)
-      .eq("status", "active");
-
-    if (error) {
+  const loadProducts = useCallback(async (sellerId: string) => {
+    try {
+      const data = await fetchPublicProfileProducts(sellerId);
+      setProducts((data ?? []).map(mapStoreProduct));
+    } catch (error) {
       if (__DEV__) console.log("PRODUCT ERROR:", error);
-      return;
     }
-
-    const formatted: StoreProduct[] = (data ?? []).map((item: any) => {
-      const mainImage = item.product_images?.find(
-        (img: { is_main: boolean }) => img.is_main === true
-      );
-      return {
-        id: item.id,
-        name: item.name,
-        price: item.price,
-        moq: item.moq ?? 0,
-        productImg: mainImage?.image_url ?? item.product_images?.[0]?.image_url ?? null,
-      };
-    });
-
-    setProducts(formatted);
   }, []);
 
-  const fetchProfile = useCallback(async () => {
-    const { data, error } = await supabase
-      .from("profiles")
-      .select(
-        "id, full_name, avatar_url, store_name, store_type, phone, district, upazila, address"
-      )
-      .eq("id", id)
-      .single();
+  const loadProfile = useCallback(async () => {
+    try {
+      const data = await fetchPublicProfile(String(id));
+      if (!data) {
+        setLoading(false);
+        return;
+      }
 
-    if (error) {
+      setProfile(data);
+      if (data?.store_type === "wholesale") {
+        await loadProducts(data.id);
+      }
+    } catch (error) {
       if (__DEV__) console.log("PROFILE ERROR:", error);
+    } finally {
       setLoading(false);
-      return;
     }
-
-    setProfile(data);
-    if (data?.store_type === "wholesale") {
-      await fetchProducts(data.id);
-    }
-    setLoading(false);
-  }, [id, fetchProducts]);
+  }, [id, loadProducts]);
 
   useEffect(() => {
-    if (id) fetchProfile();
-  }, [id, fetchProfile]);
+    if (id) loadProfile();
+  }, [id, loadProfile]);
 
   const locationLine = useMemo(() => {
     if (!profile) return null;
@@ -345,36 +350,30 @@ const PublicProfile = () => {
           setShowBlockModal(false);
 
           try {
-            const {
-              data: { user },
-            } = await supabase.auth.getUser();
-            if (!user) {
+            await blockUser(String(id));
+            showAppAlert(
+              "ব্লক হয়েছে",
+              "ইউজারকে সফলভাবে ব্লক করা হয়েছে।",
+              [{ text: "ঠিক আছে", onPress: () => navigation.goBack() }]
+            );
+          } catch (err: any) {
+            if (
+              err instanceof ApiError &&
+              (err.status === 401 || err.message === "Not signed in")
+            ) {
               showAppAlert("সাইন ইন প্রয়োজন", "ইউজার ব্লক করতে সাইন ইন করুন।");
               return;
             }
-
-            const { error } = await supabase.from("blocks").insert({
-              blocker_id: user.id,
-              blocked_id: id,
-            });
-
-            if (error) {
-              if (error.code === "23505") {
-                showAppAlert(
-                  "ইতিমধ্যে ব্লক",
-                  "আপনি এই ইউজারকে আগেই ব্লক করেছেন।"
-                );
-              } else {
-                throw error;
-              }
-            } else {
+            if (
+              err instanceof ApiError &&
+              (err.code === "23505" || err.status === 409)
+            ) {
               showAppAlert(
-                "ব্লক হয়েছে",
-                "ইউজারকে সফলভাবে ব্লক করা হয়েছে।",
-                [{ text: "ঠিক আছে", onPress: () => navigation.goBack() }]
+                "ইতিমধ্যে ব্লক",
+                "আপনি এই ইউজারকে আগেই ব্লক করেছেন।"
               );
+              return;
             }
-          } catch {
             showAppAlert("সমস্যা", "কিছু সমস্যা হয়েছে। আবার চেষ্টা করুন।");
           }
         }}

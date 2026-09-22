@@ -1,4 +1,4 @@
-import { supabase } from "@/lib/supabase";
+import { apiRequest } from "@/lib/api";
 
 export type ReferralCreatorPlatform =
   | "facebook"
@@ -27,7 +27,7 @@ export type ReferralCreatorApplication = {
 };
 
 export type SubmitReferralCreatorApplicationInput = {
-  userId: string;
+  userId?: string;
   fullName: string;
   phone: string;
   platform: ReferralCreatorPlatform;
@@ -57,83 +57,64 @@ export type MyReferralDashboard = {
   signups: ReferralSignup[];
 };
 
-/** Latest application for the current user (any status). */
+/** Latest application for the current user. */
 export async function fetchMyLatestReferralCreatorApplication(
-  userId: string
+  _userId?: string
 ): Promise<ReferralCreatorApplication | null> {
-  const { data, error } = await supabase
-    .from("referral_creator_applications")
-    .select(
-      "id, user_id, full_name, phone, platform, profile_url, follower_count, message, status, referral_creator_id, created_at"
-    )
-    .eq("user_id", userId)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (error) throw error;
-  return (data as ReferralCreatorApplication | null) ?? null;
+  const res = await apiRequest<{ application: ReferralCreatorApplication | null }>(
+    "/referral/applications/latest"
+  );
+  return res.application ?? null;
 }
 
 export async function submitReferralCreatorApplication(
   input: SubmitReferralCreatorApplicationInput
 ): Promise<void> {
-  const { error } = await supabase.from("referral_creator_applications").insert({
-    user_id: input.userId,
-    full_name: input.fullName,
-    phone: input.phone,
-    platform: input.platform,
-    profile_url: input.profileUrl,
-    follower_count: input.followerCount,
-    message: input.message,
-    status: "pending",
+  await apiRequest("/referral/applications", {
+    method: "POST",
+    body: {
+      fullName: input.fullName,
+      phone: input.phone,
+      platform: input.platform,
+      profileUrl: input.profileUrl,
+      followerCount: input.followerCount,
+      message: input.message,
+    },
   });
-
-  if (error) throw error;
 }
 
-/** Own referral_creators row (RLS: user_id = auth.uid()). */
-export async function fetchMyReferralCreator(
-  userId: string
-): Promise<MyReferralCreator | null> {
-  const { data, error } = await supabase
-    .from("referral_creators")
-    .select("id, name, code, active, created_at")
-    .eq("user_id", userId)
-    .maybeSingle();
-
-  if (error) throw error;
-  return (data as MyReferralCreator | null) ?? null;
+export async function validateReferralCode(
+  code: string
+): Promise<{ creatorId: string | null; valid: boolean }> {
+  const trimmed = code.trim();
+  if (!trimmed) return { creatorId: null, valid: false };
+  return apiRequest(`/referral/validate/${encodeURIComponent(trimmed)}`, {
+    auth: false,
+  });
 }
 
-/** Limited referred-user list via SECURITY DEFINER RPC. */
-export async function fetchMyReferralSignups(): Promise<ReferralSignup[]> {
-  const { data, error } = await supabase.rpc("get_my_referral_signups");
-
-  if (error) throw error;
-
-  return ((data as ReferralSignup[] | null) ?? []).map((row) => ({
-    id: row.id,
-    display_name: row.display_name || "ইউজার",
-    store_type: row.store_type ?? null,
-    joined_at: row.joined_at,
-  }));
-}
-
-/** Creator summary + compact signup list for the dashboard. */
+/** Dashboard for approved creators (null if not a creator). */
 export async function fetchMyReferralDashboard(
-  userId: string
+  _userId?: string
 ): Promise<MyReferralDashboard | null> {
-  const creator = await fetchMyReferralCreator(userId);
-  if (!creator) return null;
+  const res = await apiRequest<{ dashboard: MyReferralDashboard | null }>(
+    "/referral/dashboard"
+  );
+  return res.dashboard ?? null;
+}
 
-  const signups = await fetchMyReferralSignups();
+/** @deprecated use fetchMyReferralDashboard */
+export async function fetchMyReferralCreator(
+  userId?: string
+): Promise<MyReferralCreator | null> {
+  const dash = await fetchMyReferralDashboard(userId);
+  return dash?.creator ?? null;
+}
 
-  return {
-    creator,
-    totalSignups: signups.length,
-    signups,
-  };
+/** @deprecated use fetchMyReferralDashboard */
+export async function fetchMyReferralSignups(): Promise<ReferralSignup[]> {
+  const dash = await fetchMyReferralDashboard();
+  return dash?.signups ?? [];
 }
 
 export function storeTypeLabel(storeType: string | null | undefined): string {

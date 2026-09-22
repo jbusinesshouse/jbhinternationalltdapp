@@ -2,13 +2,11 @@ import RichTextEditor from '@/components/textEditor/RichTextEditor';
 import { showAppAlert } from '@/context/AppAlertContext';
 import { useUser } from '@/context/UserContext';
 import {
-    parsePositiveInt,
-    parsePositiveNumber,
-    plainTextFromHtml,
-    removeProductStoragePaths,
-    softDeleteProduct,
-    uploadProductImage,
-} from '@/lib/productMedia';
+    createProduct,
+    fetchCategories as fetchCategoriesApi,
+    fetchSizes as fetchSizesApi,
+    fetchSubcategories,
+} from '@/lib/catalogApi';
 import {
     deleteLocalImageUris,
     formatImageProcessingError,
@@ -17,12 +15,21 @@ import {
     preparePickedProductImage,
     preparePickedProductImages,
 } from '@/lib/pickedImage';
+import {
+    parsePositiveInt,
+    parsePositiveNumber,
+    plainTextFromHtml,
+    removeProductStoragePaths,
+    softDeleteProduct,
+    uploadProductImage,
+} from '@/lib/productMedia';
+import { fetchSellerUploadEligibility } from '@/lib/sellerGuards';
 import { supabase } from '@/lib/supabase';
 import { styles } from '@/styles/productUpload';
 import Feather from '@expo/vector-icons/Feather';
 import { Picker } from '@react-native-picker/picker';
 import * as ImagePicker from 'expo-image-picker';
-import { useNavigation } from 'expo-router';
+import { useNavigation, useRouter } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
 import {
     ActivityIndicator,
@@ -48,7 +55,7 @@ type Variant = {
 type DbSize = {
     id: string;
     label: string;
-    category: string;
+    category?: string | null;
 }
 
 type Category = {
@@ -59,7 +66,7 @@ type Category = {
 type Subcategory = {
     id: string;
     name: string;
-    category_id: string;
+    category_id?: string;
 }
 
 const MAX_ADDITIONAL_IMAGES = 8;
@@ -67,11 +74,13 @@ const MAX_ADDITIONAL_IMAGES = 8;
 const ProductUpload = () => {
     const { profile } = useUser();
     const navigation = useNavigation();
+    const router = useRouter();
     const sizesRequestIdRef = useRef(0);
 
     const storeType = (profile as { store_type?: string } | null)?.store_type;
     const isWholesale = storeType === 'wholesale';
     const accountBlocked = !!(profile?.status && profile.status !== 'active');
+    const canUseUploadForm = !!profile && isWholesale && !accountBlocked;
 
     const [availableSizes, setAvailableSizes] = useState<DbSize[]>([]);
 
@@ -88,79 +97,82 @@ const ProductUpload = () => {
     const [variants, setVariants] = useState<Variant[]>([]);
 
     const [categories, setCategories] = useState<Category[]>([]);
-    const [allSubcategories, setAllSubcategories] = useState<Subcategory[]>([]);
     const [filteredSubcategories, setFilteredSubcategories] = useState<Subcategory[]>([]);
     const [loadingCategories, setLoadingCategories] = useState(true);
-    const [loadingSubcategories, setLoadingSubcategories] = useState(true);
+    const [loadingSubcategories, setLoadingSubcategories] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [pickingImages, setPickingImages] = useState(false);
     const localImageUrisRef = useRef<string[]>([]);
 
     useEffect(() => {
-        fetchCategories();
-        fetchAllSubcategories();
-    }, []);
+        if (!canUseUploadForm) return;
+        loadCategories();
+    }, [canUseUploadForm]);
 
-    const fetchCategories = async () => {
+    // Kick retailers / blocked accounts off this route (deep links still land here briefly).
+    useEffect(() => {
+        if (!profile) return;
+        if (canUseUploadForm) return;
+        const t = setTimeout(() => {
+            if (router.canGoBack()) router.back();
+            else router.replace('/(tabs)/profile');
+        }, 1200);
+        return () => clearTimeout(t);
+    }, [profile, canUseUploadForm, router]);
+
+    const loadCategories = async () => {
         try {
             setLoadingCategories(true);
-            const { data, error } = await supabase
-                .from('categories')
-                .select('*')
-                .order('name', { ascending: true });
+            const data = await fetchCategoriesApi();
 
-            if (error) {
-                if (__DEV__) console.error('Error fetching categories:', error);
-                showAppAlert('সমস্যা', 'ক্যাটাগরি লোড করা যায়নি: ' + error.message);
-                return;
-            }
-
-            if (data && data.length > 0) {
+            if (data.length > 0) {
                 setCategories(data);
             } else {
                 showAppAlert('নোটিশ', 'কোনো ক্যাটাগরি পাওয়া যায়নি। ডাটাবেসে ক্যাটাগরি যোগ করুন।');
             }
         } catch (error) {
             if (__DEV__) console.error('Exception fetching categories:', error);
-            showAppAlert('সমস্যা', 'অপ্রত্যাশিত সমস্যা হয়েছে: ' + String(error));
+            showAppAlert(
+                'সমস্যা',
+                formatUploadError(error, 'ক্যাটাগরি লোড করা যায়নি')
+            );
         } finally {
             setLoadingCategories(false);
         }
     };
 
-    const fetchAllSubcategories = async () => {
-        try {
-            setLoadingSubcategories(true);
-            const { data, error } = await supabase
-                .from('subcategories')
-                .select('*')
-                .order('name', { ascending: true });
-
-            if (error) {
-                if (__DEV__) console.error('Error fetching subcategories:', error);
-                showAppAlert('সমস্যা', 'সাবক্যাটাগরি লোড করা যায়নি: ' + error.message);
-                return;
-            }
-
-            setAllSubcategories(data ?? []);
-        } catch (error) {
-            if (__DEV__) console.error('Exception fetching subcategories:', error);
-            showAppAlert('সমস্যা', 'অপ্রত্যাশিত সমস্যা হয়েছে: ' + String(error));
-        } finally {
-            setLoadingSubcategories(false);
-        }
-    };
-
     useEffect(() => {
-        if (parentCategoryId && allSubcategories.length > 0) {
-            const filtered = allSubcategories.filter(subcat =>
-                String(subcat.category_id) === String(parentCategoryId)
-            );
-            setFilteredSubcategories(filtered);
-        } else {
+        if (!parentCategoryId) {
             setFilteredSubcategories([]);
+            return;
         }
-    }, [parentCategoryId, allSubcategories]);
+
+        let cancelled = false;
+
+        const loadSubcategories = async () => {
+            try {
+                setLoadingSubcategories(true);
+                const data = await fetchSubcategories(parentCategoryId);
+                if (!cancelled) setFilteredSubcategories(data);
+            } catch (error) {
+                if (__DEV__) console.error('Exception fetching subcategories:', error);
+                if (!cancelled) {
+                    setFilteredSubcategories([]);
+                    showAppAlert(
+                        'সমস্যা',
+                        formatUploadError(error, 'সাবক্যাটাগরি লোড করা যায়নি')
+                    );
+                }
+            } finally {
+                if (!cancelled) setLoadingSubcategories(false);
+            }
+        };
+
+        loadSubcategories();
+        return () => {
+            cancelled = true;
+        };
+    }, [parentCategoryId]);
 
     useEffect(() => {
         localImageUrisRef.current = [mainImage, ...images].filter(
@@ -287,25 +299,19 @@ const ProductUpload = () => {
 
         const requestId = ++sizesRequestIdRef.current;
 
-        const fetchSizes = async (): Promise<void> => {
-            const { data, error } = await supabase
-                .from('sizes')
-                .select('id, label, category')
-                .eq('category', parentCategory.toLowerCase())
-                .order('sort_order', { ascending: true });
-
-            if (requestId !== sizesRequestIdRef.current) return;
-
-            if (error) {
+        const loadSizes = async (): Promise<void> => {
+            try {
+                const data = await fetchSizesApi(parentCategory.toLowerCase());
+                if (requestId !== sizesRequestIdRef.current) return;
+                setAvailableSizes(data as DbSize[]);
+            } catch (error) {
                 if (__DEV__) console.error(error);
+                if (requestId !== sizesRequestIdRef.current) return;
                 setAvailableSizes([]);
-                return;
             }
-
-            setAvailableSizes((data as DbSize[]) ?? []);
         };
 
-        fetchSizes();
+        loadSizes();
     }, [parentCategory]);
 
     const resetForm = () => {
@@ -397,125 +403,86 @@ const ProductUpload = () => {
                 return;
             }
 
-            const sellerId = userData.user.id;
-            const parsedPrice = parsePositiveNumber(price)!;
-            const parsedMoq = parsePositiveInt(moq)!;
-
-            // 1) Create product first (avoids orphan files if insert fails)
-            // Explicit status matches live catalog behavior (DB samples are all "active").
-            const { data: productData, error: productError } = await supabase
-                .from('products')
-                .insert({
-                    seller_id: sellerId,
-                    name: name.trim(),
-                    description: description.trim(),
-                    category_id: parentCategoryId,
-                    selected_category: category.trim(),
-                    subcategory_id: subCategoryId,
-                    price: parsedPrice,
-                    moq: parsedMoq,
-                    active: true,
-                    status: 'active',
-                    is_deleted: false,
-                })
-                .select('id')
-                .single();
-
-            if (productError || !productData) {
-                if (__DEV__) console.error('Product insert error:', productError);
-                showAppAlert(
-                    'সমস্যা',
-                    'প্রোডাক্ট তৈরি হয়নি: ' + (productError?.message || 'অজানা সমস্যা')
-                );
+            // Fresh DB check — context can be stale or spoofed in a patched client.
+            const eligibility = await fetchSellerUploadEligibility(userData.user.id);
+            if (!eligibility.allowed) {
+                showAppAlert('অনুমতি নেই', eligibility.reason || 'প্রোডাক্ট আপলোড করা যাবে না।');
                 return;
             }
 
-            createdProductId = productData.id;
-            const productId = productData.id;
-            const folder = `products/${productId}`;
+            const parsedPrice = parsePositiveNumber(price)!;
+            const parsedMoq = parsePositiveInt(moq)!;
 
-            // 2) Upload + attach main image
-            const mainUpload = await uploadProductImage(mainImage!, `${folder}/main`);
+            // 1) Upload all images first (no product id required)
+            const mainUpload = await uploadProductImage(mainImage!);
             uploadedPaths.push(mainUpload.path);
 
-            const { error: mainImageError } = await supabase
-                .from('product_images')
-                .insert({
-                    product_id: productId,
+            const imagePayload: {
+                image_url: string;
+                is_main: boolean;
+                sort_order: number;
+            }[] = [
+                {
                     image_url: mainUpload.publicUrl,
                     is_main: true,
-                    sort_order: 0
-                });
+                    sort_order: 0,
+                },
+            ];
 
-            if (mainImageError) {
-                throw new Error(mainImageError.message || 'Failed to save main image');
-            }
-
-            // 3) Upload + attach additional images (all must succeed)
-            if (images.length > 0) {
-                const additionalRows: {
-                    product_id: string;
-                    image_url: string;
-                    is_main: boolean;
-                    sort_order: number;
-                }[] = [];
-
-                for (let i = 0; i < images.length; i++) {
-                    const uploaded = await uploadProductImage(images[i], `${folder}/additional`);
+            for (let i = 0; i < images.length; i++) {
+                try {
+                    const uploaded = await uploadProductImage(images[i]);
                     uploadedPaths.push(uploaded.path);
-                    additionalRows.push({
-                        product_id: productId,
+                    imagePayload.push({
                         image_url: uploaded.publicUrl,
                         is_main: false,
                         sort_order: i + 1,
                     });
-                }
-
-                const { error: additionalImagesError } = await supabase
-                    .from('product_images')
-                    .insert(additionalRows);
-
-                if (additionalImagesError) {
-                    throw new Error(
-                        additionalImagesError.message || 'Failed to save additional images'
+                } catch (imgErr) {
+                    const apiErr = imgErr as {
+                        status?: number;
+                        code?: string;
+                        message?: string;
+                    };
+                    throw Object.assign(
+                        new Error(
+                            apiErr?.message ||
+                                `Image ${i + 2} upload failed`
+                        ),
+                        {
+                            status: apiErr?.status,
+                            code: apiErr?.code || 'IMAGE_UPLOAD_FAILED',
+                            message:
+                                apiErr?.message ||
+                                `অতিরিক্ত ছবি #${i + 2} আপলোড ব্যর্থ হয়েছে।`,
+                        }
                     );
                 }
             }
 
-            // 4) Variants + sizes (hard-fail on any error)
-            for (const variant of variants) {
-                const { data: variantData, error: variantError } = await supabase
-                    .from('product_variants')
-                    .insert({
-                        product_id: productId,
-                        color: variant.color.trim()
-                    })
-                    .select('id')
-                    .single();
-
-                if (variantError || !variantData) {
-                    throw new Error(
-                        variantError?.message || `Failed to save color ${variant.color}`
-                    );
-                }
-
-                const sizesData = variant.sizes.map(size => ({
-                    variant_id: variantData.id,
+            const variantPayload = variants.map((variant) => ({
+                color: variant.color.trim(),
+                sizes: variant.sizes.map((size) => ({
                     size_id: size.size_id,
                     size: size.label,
                     stock: parsePositiveInt(size.stock)!,
-                }));
+                })),
+            }));
 
-                const { error: sizesError } = await supabase
-                    .from('product_sizes')
-                    .insert(sizesData);
+            // 2) Create product with images + variants in one request
+            const created = await createProduct({
+                name: name.trim(),
+                description: description.trim(),
+                category_id: parentCategoryId,
+                subcategory_id: subCategoryId,
+                selected_category: category.trim(),
+                price: parsedPrice,
+                moq: parsedMoq,
+                images: imagePayload,
+                variants: variantPayload,
+            });
 
-                if (sizesError) {
-                    throw new Error(
-                        sizesError.message || `Failed to save sizes for ${variant.color}`
-                    );
-                }
-            }
+            createdProductId = created.id;
 
             resetForm();
             showAppAlert(
@@ -524,7 +491,24 @@ const ProductUpload = () => {
                 [{ text: 'ঠিক আছে', onPress: () => navigation.goBack() }]
             );
         } catch (error) {
-            if (__DEV__) console.error('Exception during submission:', error);
+            const apiErr = error as { status?: number; code?: string; message?: string };
+            const detail = [
+              apiErr?.code ? `code=${apiErr.code}` : null,
+              apiErr?.status ? `status=${apiErr.status}` : null,
+              apiErr?.message || (error instanceof Error ? error.message : null),
+              `images=${1 + images.length}`,
+              `uploadedOk=${uploadedPaths.length}`,
+              profile?.store_type ? `store_type=${profile.store_type}` : null,
+              profile?.status ? `status=${profile.status}` : null,
+            ]
+              .filter(Boolean)
+              .join(' | ');
+
+            if (__DEV__) {
+              console.error('Exception during submission:', detail, error);
+            } else {
+              console.error('[productUpload] failed:', detail);
+            }
 
             if (createdProductId) {
                 await softDeleteProduct(createdProductId);
@@ -533,9 +517,13 @@ const ProductUpload = () => {
                 await removeProductStoragePaths(uploadedPaths);
             }
 
+            const userMessage = formatUploadError(
+              error,
+              'অপ্রত্যাশিত সমস্যা হয়েছে'
+            );
             showAppAlert(
-                'সমস্যা',
-                formatUploadError(error, 'অপ্রত্যাশিত সমস্যা হয়েছে')
+              'সমস্যা',
+              __DEV__ ? `${userMessage}\n\n(${detail})` : userMessage
             );
         } finally {
             setIsSubmitting(false);
@@ -544,6 +532,34 @@ const ProductUpload = () => {
 
     const submitDisabled =
         isSubmitting || accountBlocked || !isWholesale || !profile;
+
+    if (profile && !canUseUploadForm) {
+        const blockedMessage = !isWholesale
+            ? 'Only wholesale seller accounts can upload products.'
+            : accountBlocked
+              ? profile.status === 'freeze'
+                ? 'Your account is frozen. Product upload is disabled.'
+                : 'Your account is restricted. Product upload is disabled.'
+              : 'Product upload is not available for this account.';
+
+        return (
+            <View style={styles.page}>
+                <View style={styles.header}>
+                    <Pressable onPress={() => navigation.goBack()}>
+                        <Image source={require('@/assets/images/icons/chevron-right.png')} style={styles.backIcon} />
+                    </Pressable>
+                    <Text style={styles.headerTitle}>Upload Product</Text>
+                    <View style={{ width: 30 }} />
+                </View>
+                <View style={[styles.section, { paddingTop: 24 }]}>
+                    <Text style={{ color: '#b91c1c', lineHeight: 20 }}>{blockedMessage}</Text>
+                    <Text style={{ color: '#6b7280', marginTop: 8, lineHeight: 20 }}>
+                        Returning to your profile…
+                    </Text>
+                </View>
+            </View>
+        );
+    }
 
     return (
         <View style={styles.page}>
@@ -562,14 +578,6 @@ const ProductUpload = () => {
                 keyboardShouldPersistTaps="handled"
                 removeClippedSubviews={false}
             >
-                {!isWholesale && profile ? (
-                    <View style={styles.section}>
-                        <Text style={{ color: '#b91c1c', lineHeight: 20 }}>
-                            Only wholesale seller accounts can upload products.
-                        </Text>
-                    </View>
-                ) : null}
-
                 <View style={styles.section}>
                     <Text style={styles.sectionTitle}>Product Media</Text>
                     {pickingImages ? (
@@ -623,7 +631,7 @@ const ProductUpload = () => {
                     ) : categories.length === 0 ? (
                         <View style={{ paddingVertical: 20, alignItems: 'center' }}>
                             <Text style={{ color: '#ef4444' }}>No categories available</Text>
-                            <Pressable onPress={fetchCategories} style={{ marginTop: 10 }}>
+                            <Pressable onPress={loadCategories} style={{ marginTop: 10 }}>
                                 <Text style={{ color: '#3b82f6', textDecorationLine: 'underline' }}>Retry</Text>
                             </Pressable>
                         </View>
@@ -775,13 +783,11 @@ const ProductUpload = () => {
                             <ActivityIndicator color="#fff" />
                         ) : (
                             <Text style={styles.submitText}>
-                                {!isWholesale && profile
-                                    ? "Sellers Only"
-                                    : profile?.status === 'freeze'
-                                        ? "Account Frozen"
-                                        : profile?.status === 'restricted'
-                                            ? "Upload Restricted"
-                                            : "Upload Product"}
+                                {profile?.status === 'freeze'
+                                    ? "Account Frozen"
+                                    : profile?.status === 'restricted'
+                                        ? "Upload Restricted"
+                                        : "Upload Product"}
                             </Text>
                         )}
                     </Pressable>

@@ -5,6 +5,7 @@ import useAppUpdate from '@/hooks/useAppUpdate'
 import { useProtectedRoute } from "@/hooks/useAuth"
 import { useKeyboardBehavior } from '@/hooks/useKeyboardBehavior'
 import usePlatformFeeDueAlert from '@/hooks/usePlatformFeeDueAlert'
+import { usePushNotifications } from '@/hooks/usePushNotifications'
 import { Stack } from "expo-router"
 import * as SplashScreen from 'expo-splash-screen'
 import { useCallback, useEffect } from 'react'
@@ -35,6 +36,7 @@ function RootLayoutNav() {
 
   useAppUpdate();
   usePlatformFeeDueAlert();
+  usePushNotifications();
 
   const onLayoutRootView = useCallback(() => {
     SplashScreen.hideAsync().catch(() => {});

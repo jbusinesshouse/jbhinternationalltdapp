@@ -1,4 +1,4 @@
-import { supabase } from "@/lib/supabase";
+import { apiRequest, newIdempotencyKey } from "@/lib/api";
 
 /** 2% of completed sales */
 export const PLATFORM_FEE_RATE = 0.02;
@@ -9,7 +9,7 @@ export const PLATFORM_FEE_WARN_AT = 800;
 
 /**
  * Personal bKash number sellers Send Money to.
- * Replace with your real number before production.
+ * Server may override via summary.bkashNumber.
  */
 export const PLATFORM_BKASH_NUMBER = "01950863414";
 
@@ -29,30 +29,20 @@ export type PlatformFeePayment = {
   admin_note: string | null;
 };
 
-/**
- * Tracking model:
- * - feeFromSales  = completed_sales × 2%   (fee added from seller sales)
- * - approvedPaid  = sum of approved proofs
- * - pendingPaid   = sum of pending proofs (not counted as paid yet)
- * - balance       = feeFromSales − approvedPaid
- * - outstanding   = min(max(balance, 0), 1000)  (what they should pay now)
- */
 export type PlatformFeeSummary = {
   salesTotal: number;
-  /** 2% of completed sales — fee generated from sales */
   feeFromSales: number;
-  /** Approved bKash proofs total */
   approvedPaid: number;
-  /** Pending proofs (awaiting manual review) */
   pendingPaid: number;
-  /** feeFromSales − approvedPaid (can exceed the 1000 cap) */
   balance: number;
-  /** Amount due now (capped at 1000) */
   outstanding: number;
-  /** How much of feeFromSales is above the current due cap */
   deferredBeyondCap: number;
   pendingPayment: PlatformFeePayment | null;
   recentPayments: PlatformFeePayment[];
+  bkashNumber?: string;
+  rate?: number;
+  maxDue?: number;
+  warnAt?: number;
 };
 
 export type FeeAlertLevel = "ok" | "warn" | "critical" | "clear";
@@ -64,7 +54,6 @@ export function getFeeAlertLevel(outstanding: number): FeeAlertLevel {
   return "ok";
 }
 
-/** Popup / banner copy when due is near or at the 1000 BDT cap. */
 export function getFeeDueAlertCopy(summary: {
   outstanding: number;
   deferredBeyondCap?: number;
@@ -100,120 +89,27 @@ export function formatBdt(amount: number): string {
   })}`;
 }
 
-function roundMoney(n: number): number {
-  return Math.round(n * 100) / 100;
-}
-
-/**
- * Sum completed order line totals for the seller's products.
- */
-export async function fetchSellerCompletedSalesTotal(
-  sellerId: string
-): Promise<number> {
-  const { data: products, error: productError } = await supabase
-    .from("products")
-    .select("id")
-    .eq("seller_id", sellerId);
-
-  if (productError) throw productError;
-  if (!products?.length) return 0;
-
-  const productIds = products.map((p) => p.id);
-
-  const { data: orders, error: ordersError } = await supabase
-    .from("orders")
-    .select(
-      `
-      id,
-      status,
-      order_items (
-        quantity,
-        price_snapshot
-      )
-    `
-    )
-    .in("product_id", productIds)
-    .eq("status", "completed");
-
-  if (ordersError) throw ordersError;
-
-  let total = 0;
-  for (const order of orders ?? []) {
-    const items = (order as any).order_items ?? [];
-    for (const item of items) {
-      const qty = Number(item.quantity) || 0;
-      const price = Number(item.price_snapshot) || 0;
-      total += qty * price;
-    }
-  }
-
-  return roundMoney(total);
-}
-
-export async function fetchMyPlatformFeePayments(
-  sellerId: string
-): Promise<PlatformFeePayment[]> {
-  const { data, error } = await supabase
-    .from("platform_fee_payments")
-    .select(
-      "id, seller_id, amount_bdt, bkash_number, transaction_reference, status, created_at, admin_note"
-    )
-    .eq("seller_id", sellerId)
-    .order("created_at", { ascending: false })
-    .limit(30);
-
-  if (error) throw error;
-
-  return ((data ?? []) as any[]).map((row) => ({
-    ...row,
-    amount_bdt: Number(row.amount_bdt) || 0,
-  }));
-}
-
 export async function fetchPlatformFeeSummary(
-  sellerId: string
+  _sellerId?: string
 ): Promise<PlatformFeeSummary> {
-  const [salesTotal, payments] = await Promise.all([
-    fetchSellerCompletedSalesTotal(sellerId),
-    fetchMyPlatformFeePayments(sellerId),
-  ]);
-
-  const feeFromSales = roundMoney(salesTotal * PLATFORM_FEE_RATE);
-  const approvedPaid = roundMoney(
-    payments
-      .filter((p) => p.status === "approved")
-      .reduce((sum, p) => sum + p.amount_bdt, 0)
-  );
-  const pendingPaid = roundMoney(
-    payments
-      .filter((p) => p.status === "pending")
-      .reduce((sum, p) => sum + p.amount_bdt, 0)
-  );
-
-  const balance = roundMoney(feeFromSales - approvedPaid);
-  const outstanding = roundMoney(
-    Math.min(Math.max(balance, 0), PLATFORM_FEE_MAX_DUE)
-  );
-  const deferredBeyondCap = roundMoney(Math.max(0, balance - outstanding));
-
-  const pendingPayment =
-    payments.find((p) => p.status === "pending") ?? null;
-
+  const summary = await apiRequest<PlatformFeeSummary>("/platform-fee/summary");
   return {
-    salesTotal,
-    feeFromSales,
-    approvedPaid,
-    pendingPaid,
-    balance,
-    outstanding,
-    deferredBeyondCap,
-    pendingPayment,
-    recentPayments: payments,
+    ...summary,
+    recentPayments: (summary.recentPayments ?? []).map((row) => ({
+      ...row,
+      amount_bdt: Number(row.amount_bdt) || 0,
+    })),
+    pendingPayment: summary.pendingPayment
+      ? {
+          ...summary.pendingPayment,
+          amount_bdt: Number(summary.pendingPayment.amount_bdt) || 0,
+        }
+      : null,
   };
 }
 
 export async function submitPlatformFeePayment(params: {
-  sellerId: string;
+  sellerId?: string;
   amountBdt: number;
   bkashNumber: string;
   transactionReference: string;
@@ -222,32 +118,21 @@ export async function submitPlatformFeePayment(params: {
   feeDueSnapshot: number;
   approvedPaidSnapshot: number;
 }): Promise<void> {
-  const {
-    sellerId,
-    amountBdt,
-    bkashNumber,
-    transactionReference,
-    salesTotalSnapshot,
-    feeFromSalesSnapshot,
-    feeDueSnapshot,
-    approvedPaidSnapshot,
-  } = params;
-
-  if (!(amountBdt > 0)) {
+  if (!(params.amountBdt > 0)) {
     throw new Error("Invalid amount");
   }
 
-  const { error } = await supabase.from("platform_fee_payments").insert({
-    seller_id: sellerId,
-    amount_bdt: amountBdt,
-    bkash_number: bkashNumber.trim(),
-    transaction_reference: transactionReference.trim(),
-    sales_total_snapshot: salesTotalSnapshot,
-    fee_from_sales_snapshot: feeFromSalesSnapshot,
-    fee_due_snapshot: feeDueSnapshot,
-    approved_paid_snapshot: approvedPaidSnapshot,
-    status: "pending",
+  await apiRequest("/platform-fee/payments", {
+    method: "POST",
+    body: {
+      amountBdt: params.amountBdt,
+      bkashNumber: params.bkashNumber.trim(),
+      transactionReference: params.transactionReference.trim(),
+      salesTotalSnapshot: params.salesTotalSnapshot,
+      feeFromSalesSnapshot: params.feeFromSalesSnapshot,
+      feeDueSnapshot: params.feeDueSnapshot,
+      approvedPaidSnapshot: params.approvedPaidSnapshot,
+    },
+    idempotencyKey: newIdempotencyKey(),
   });
-
-  if (error) throw error;
 }

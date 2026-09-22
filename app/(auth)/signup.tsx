@@ -1,5 +1,9 @@
 import { showAppAlert } from '@/context/AppAlertContext'
 import { useAuth } from '@/hooks/useAuth'
+import {
+    uploadAvatar,
+    upsertMyProfile,
+} from '@/lib/catalogApi'
 import { compressAvatarImage } from '@/lib/compressImage'
 import {
     deleteLocalImageUris,
@@ -7,6 +11,7 @@ import {
     isPreparedImageUri,
     preparePickedAvatarImage,
 } from '@/lib/pickedImage'
+import { validateReferralCode } from '@/lib/referralCreatorApplications'
 import { supabase } from '@/lib/supabase'
 import { Picker } from '@react-native-picker/picker'
 import Checkbox from 'expo-checkbox'
@@ -211,25 +216,19 @@ const Signup = () => {
             setIsSettingUp(true);
 
             // ---- REFERRAL CODE (optional) ----
-            // If a code is provided, validate it via RPC before creating the account.
             let referralCreatorId: string | null = null
             const trimmedReferralCode = referralCode.trim()
             if (trimmedReferralCode) {
-                const { data: referralData, error: referralError } = await supabase
-                    .rpc('get_referral_creator', { referral_code: trimmedReferralCode })
+                const referral = await validateReferralCode(trimmedReferralCode)
 
-                // Network / RPC failure → fall through to normal signup error handling
-                if (referralError) throw referralError
-
-                // NULL → invalid code, block signup
-                if (!referralData) {
+                if (!referral.valid || !referral.creatorId) {
                     setIsSettingUp(false)
                     setLoading(false)
                     showAppAlert('ভুল রেফারেল কোড', 'রেফারেল কোডটি সঠিক নয়।')
                     return
                 }
 
-                referralCreatorId = referralData as string
+                referralCreatorId = referral.creatorId
             }
 
             // Sign up the user
@@ -245,95 +244,48 @@ const Signup = () => {
             if (error) throw error
             if (!data.user) throw new Error('User not created')
 
-            const userId = data.user.id
             if (__DEV__) {
-                console.log('User ID:', userId)
+                console.log('User ID:', data.user.id)
             }
 
-            let avatarUrl = null
+            let avatarUrl: string | null = null
 
-            // Try to upload image using ArrayBuffer instead of Blob
             if (image) {
                 try {
                     const compressed = isPreparedImageUri(image)
                         ? { uri: image }
                         : await compressAvatarImage(image)
 
-                    // Fetch the image as arrayBuffer
-                    const response = await fetch(compressed.uri)
-                    const arrayBuffer = await response.arrayBuffer()
-                    const filePath = `${userId}.jpg`
-
-                    if (__DEV__) {
-                        console.log('Uploading image...')
-                    }
-
-                    const { data: uploadData, error: uploadError } = await supabase.storage
-                        .from('profile-images')
-                        .upload(filePath, arrayBuffer, {
-                            contentType: 'image/jpeg',
-                            upsert: true,
-                        })
-
-                    if (__DEV__) {
-                        console.log('Upload result:', { uploadData, uploadError })
-                    }
-
-                    if (uploadError) {
-                        if (__DEV__) {
-                            console.error('Upload error:', uploadError)
-                        }
-                        // Don't throw - continue without image
-                    } else {
-                        const { data: publicData } = supabase.storage
-                            .from('profile-images')
-                            .getPublicUrl(filePath)
-                        avatarUrl = publicData.publicUrl
-                        if (__DEV__) {
-                            console.log('Avatar URL:', avatarUrl)
-                        }
-                    }
+                    const uploaded = await uploadAvatar(compressed.uri)
+                    avatarUrl = uploaded.publicUrl
                 } catch (uploadErr) {
                     if (__DEV__) {
                         console.error('Image upload failed:', uploadErr)
                     }
-                    // Continue without image
                 }
             }
 
-
-            // Insert profile (with or without avatar)
             if (__DEV__) {
                 console.log('Inserting profile...')
             }
-            const { data: profileData, error: profileError } = await supabase
-                .from('profiles')
-                .upsert({
-                    id: userId,
-                    full_name: fullName,
-                    phone,
-                    store_name: storeName,
-                    store_type: storeType,
-                    address,
-                    district: district,
-                    upazila: selectedUpazila,
-                    avatar_url: avatarUrl,
-                    referral_creator_id: referralCreatorId,
-                })
-                .select()
+            await upsertMyProfile({
+                full_name: fullName,
+                phone,
+                store_name: storeName,
+                store_type: storeType,
+                address,
+                district: district,
+                upazila: selectedUpazila,
+                avatar_url: avatarUrl,
+                referral_creator_id: referralCreatorId,
+            })
 
-            if (__DEV__) {
-                console.log('Profile insert result:', { profileData, profileError })
-            }
-
-            if (profileError) {
-                if (__DEV__) {
-                    console.error('Profile error:', JSON.stringify(profileError, null, 2))
-                    throw profileError
-                }
-            }
-
-            showAppAlert('সফল', 'আপনার অ্যাকাউন্ট তৈরি হয়েছে।')
+            showAppAlert(
+                'সফল',
+                storeType === 'wholesale'
+                    ? 'আপনার অ্যাকাউন্ট তৈরি হয়েছে। হোলসেল সেলার অ্যাক্সেস অ্যাডমিন অনুমোদনের পর চালু হবে।'
+                    : 'আপনার অ্যাকাউন্ট তৈরি হয়েছে।'
+            )
             setIsSettingUp(false);
             // setTimeout(() => {
             //     router.replace('/signin')

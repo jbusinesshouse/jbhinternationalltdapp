@@ -1,4 +1,4 @@
-import { supabase } from "@/lib/supabase";
+import { apiRequest } from "@/lib/api";
 
 export type ProductAdRequestStatus = "pending" | "approved" | "rejected";
 
@@ -62,77 +62,33 @@ export type ProductAdRequest = {
   product_ad_request_items?: ProductAdRequestItem[];
 };
 
-/** Active (non-deleted) products the seller can advertise. */
+/** Active products the seller can advertise. */
 export async function fetchSellerProductsForAds(
-  sellerId: string
+  _sellerId?: string
 ): Promise<SellerProductForAd[]> {
-  const { data, error } = await supabase
-    .from("products")
-    .select(
-      `
-      id,
-      name,
-      price,
-      status,
-      product_images (
-        image_url,
-        is_main
-      )
-    `
-    )
-    .eq("seller_id", sellerId)
-    .eq("is_deleted", false)
-    .eq("status", "active")
-    .order("created_at", { ascending: false });
-
-  if (error) throw error;
-  return (data as SellerProductForAd[]) ?? [];
+  const res = await apiRequest<{ products: SellerProductForAd[] }>(
+    "/ads/my-products"
+  );
+  return res.products ?? [];
 }
 
-/** Latest request for the current seller (any status), with items + product info. */
+/** Latest request for the current seller. */
 export async function fetchMyLatestProductAdRequest(
-  sellerId: string
+  _sellerId?: string
 ): Promise<ProductAdRequest | null> {
-  const { data, error } = await supabase
-    .from("product_ad_requests")
-    .select(
-      `
-      id,
-      seller_id,
-      sell_target_bdt,
-      budget_bdt,
-      duration_days,
-      status,
-      created_at,
-      product_ad_request_items (
-        product_id,
-        products (
-          id,
-          name,
-          product_images (
-            image_url,
-            is_main
-          )
-        )
-      )
-    `
-    )
-    .eq("seller_id", sellerId)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (error) throw error;
-  return (data as ProductAdRequest | null) ?? null;
+  const res = await apiRequest<{ request: ProductAdRequest | null }>(
+    "/ads/requests/latest"
+  );
+  return res.request ?? null;
 }
 
 export async function submitProductAdRequest(params: {
-  sellerId: string;
+  sellerId?: string;
   productIds: string[];
   sellTargetBdt: number;
   budgetBdt: number;
 }): Promise<void> {
-  const { sellerId, productIds, sellTargetBdt, budgetBdt } = params;
+  const { productIds, sellTargetBdt, budgetBdt } = params;
 
   if (!productIds.length) {
     throw new Error("Select at least one product");
@@ -146,29 +102,12 @@ export async function submitProductAdRequest(params: {
     throw new Error("Invalid advertising package");
   }
 
-  const { data: request, error: requestError } = await supabase
-    .from("product_ad_requests")
-    .insert({
-      seller_id: sellerId,
-      sell_target_bdt: sellTargetBdt,
-      budget_bdt: budgetBdt,
-      duration_days: AD_DURATION_DAYS,
-      status: "pending",
-    })
-    .select("id")
-    .single();
-
-  if (requestError) throw requestError;
-  if (!request?.id) throw new Error("Failed to create advertising request");
-
-  const items = productIds.map((productId) => ({
-    request_id: request.id,
-    product_id: productId,
-  }));
-
-  const { error: itemsError } = await supabase
-    .from("product_ad_request_items")
-    .insert(items);
-
-  if (itemsError) throw itemsError;
+  await apiRequest("/ads/requests", {
+    method: "POST",
+    body: {
+      productIds,
+      sellTargetBdt,
+      budgetBdt,
+    },
+  });
 }

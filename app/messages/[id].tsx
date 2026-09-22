@@ -105,7 +105,7 @@ const SingleMessage = () => {
         const hasCachedMessages = (messagesByRoomRef.current[roomId]?.length ?? 0) > 0;
         setHydrating(!hasCachedMessages);
 
-        void (async () => {
+        const load = async (opts?: { silent?: boolean }) => {
             const [messagesResult, roomResult] = await Promise.all([
                 fetchChatMessages(roomId),
                 fetchChatRoom(roomId),
@@ -115,7 +115,7 @@ const SingleMessage = () => {
 
             if (!messagesResult.error) {
                 setMessages(roomId, messagesResult.data);
-            } else {
+            } else if (!opts?.silent) {
                 showAppAlert('সমস্যা', messagesResult.error);
             }
 
@@ -123,11 +123,21 @@ const SingleMessage = () => {
                 setRoomProductName(roomResult.data.product.name);
             }
 
-            setHydrating(false);
-        })();
+            if (!opts?.silent) {
+                setHydrating(false);
+            }
+        };
+
+        void load();
+
+        // Poll open thread via backend (no Supabase Realtime).
+        const pollId = setInterval(() => {
+            void load({ silent: true });
+        }, 3000);
 
         return () => {
             cancelled = true;
+            clearInterval(pollId);
         };
     }, [roomId, setMessages]);
 
@@ -150,7 +160,7 @@ const SingleMessage = () => {
         setMessageVal('');
         Keyboard.dismiss();
 
-        const { data, error } = await sendChatMessage(roomId, user.id, trimmed);
+        const { data, error } = await sendChatMessage(roomId, trimmed);
         setSending(false);
 
         if (error) {

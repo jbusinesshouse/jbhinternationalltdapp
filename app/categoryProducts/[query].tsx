@@ -1,9 +1,9 @@
 import SingleProduct from "@/components/SingleProduct";
 import { useAdvertisedProducts } from "@/hooks/useAdvertisedProducts";
 import { useShuffledProductFeed } from "@/hooks/useShuffledProductFeed";
+import { fetchSubcategories } from "@/lib/catalogApi";
 import { AdvertisedProduct } from "@/lib/productAds";
 import { ProductFeedItem } from "@/lib/productFeed";
-import { supabase } from "@/lib/supabase";
 import { Image } from "expo-image";
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
@@ -73,23 +73,11 @@ export default function CategoryProducts() {
   const PRIMARY_COLOR = "#f5832b";
 
   useEffect(() => {
-    const fetchSubCategories = async () => {
+    const loadSubCategories = async () => {
       try {
-        const { data, error } = await supabase
-          .from("subcategories")
-          .select("id, name")
-          .eq("category_id", categoryId);
-
-        if (error) {
-          if (__DEV__) {
-            console.error("Subcategory error:", error);
-          }
-          return;
-        }
-
-        if (data) {
-          setSubCategories([{ id: "all", name: "All" }, ...data]);
-        }
+        if (!categoryId) return;
+        const data = await fetchSubcategories(String(categoryId));
+        setSubCategories([{ id: "all", name: "All" }, ...data]);
       } catch (err) {
         if (__DEV__) {
           console.error("Subcategory fetch failed:", err);
@@ -98,7 +86,7 @@ export default function CategoryProducts() {
     };
 
     if (categoryId) {
-      fetchSubCategories();
+      loadSubCategories();
       setSelectedSub("all");
     }
   }, [categoryId]);

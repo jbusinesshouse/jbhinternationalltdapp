@@ -1,4 +1,4 @@
-import { supabase } from "@/lib/supabase";
+import { apiRequest } from "@/lib/api";
 
 export type FeaturedRequestStatus = "pending" | "approved" | "rejected";
 
@@ -10,50 +10,34 @@ export type FeaturedStoreRequest = {
   created_at: string;
 };
 
-/** Latest request for the current seller (any status). */
+/** Latest request for the current seller. */
 export async function fetchMyLatestFeaturedRequest(
-  sellerId: string
+  _sellerId?: string
 ): Promise<FeaturedStoreRequest | null> {
-  const { data, error } = await supabase
-    .from("featured_store_requests")
-    .select("id, seller_id, message, status, created_at")
-    .eq("seller_id", sellerId)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (error) throw error;
-  return (data as FeaturedStoreRequest | null) ?? null;
+  const res = await apiRequest<{
+    request: FeaturedStoreRequest | null;
+    currentlyFeatured: boolean;
+  }>("/featured/requests/latest");
+  return res.request ?? null;
 }
 
 /** True if the seller currently has an active featured window. */
 export async function isSellerCurrentlyFeatured(
-  sellerId: string
+  _sellerId?: string
 ): Promise<boolean> {
-  const now = new Date().toISOString();
-
-  const { data, error } = await supabase
-    .from("featured_stores")
-    .select("seller_id")
-    .eq("seller_id", sellerId)
-    .eq("is_active", true)
-    .lte("starts_at", now)
-    .gte("ends_at", now)
-    .limit(1);
-
-  if (error) throw error;
-  return (data?.length ?? 0) > 0;
+  const res = await apiRequest<{
+    request: FeaturedStoreRequest | null;
+    currentlyFeatured: boolean;
+  }>("/featured/requests/latest");
+  return Boolean(res.currentlyFeatured);
 }
 
 export async function submitFeaturedStoreRequest(
-  sellerId: string,
+  _sellerId: string | undefined,
   message: string | null
 ): Promise<void> {
-  const { error } = await supabase.from("featured_store_requests").insert({
-    seller_id: sellerId,
-    message,
-    status: "pending",
+  await apiRequest("/featured/requests", {
+    method: "POST",
+    body: { message },
   });
-
-  if (error) throw error;
 }

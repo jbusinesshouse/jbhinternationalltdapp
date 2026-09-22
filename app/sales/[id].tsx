@@ -1,6 +1,7 @@
 import ConfirmModal from '@/components/modal/ConfirmModal'
 import { showAppAlert } from '@/context/AppAlertContext'
-import { supabase } from '@/lib/supabase'
+import { ApiError } from '@/lib/api'
+import { fetchSaleDetail, updateSaleStatus } from '@/lib/catalogApi'
 import { styles } from '@/styles/profile'
 import { useLocalSearchParams, useNavigation } from 'expo-router'
 import React, { useEffect, useState } from 'react'
@@ -43,25 +44,8 @@ const SalesDetails = () => {
 
         try {
             setLoading(true)
-
-            const { data, error } = await supabase
-                .from('orders')
-                .select(`
-                    *,
-                    order_items (
-                        quantity,
-                        price_snapshot,
-                        product_name_snapshot,
-                        product_variants (color),
-                        product_sizes (size)
-                    )
-                `)
-                .eq('id', id)
-                .single()
-
-            if (error) throw error
-            setOrder(data as any)
-
+            const res = await fetchSaleDetail(id)
+            setOrder(res.order as Order)
         } catch (err) {
             if (__DEV__) {
                 console.log(err)
@@ -81,139 +65,45 @@ const SalesDetails = () => {
         setModalVisible(true)
     }
 
-    const sendCancelRequest = async () => {
-        if (!order?.user_id) return
-
-        try {
-            setUpdating(true)
-
-            const { data: existing, error: existingError } = await supabase
-                .from('notifications')
-                .select('id')
-                .eq('order_id', order.id)
-                .eq('type', 'order_cancel_request')
-                .eq('action_completed', false)
-                .limit(1)
-
-            if (existingError) throw existingError
-
-            if (existing && existing.length > 0) {
-                showAppAlert(
-                    'ইতিমধ্যে পাঠানো',
-                    'এই অর্ডারের জন্য বাতিলের অনুরোধ আগেই পাঠানো হয়েছে।'
-                )
-                return
-            }
-
-            const { error } = await supabase.from('notifications').insert([
-                {
-                    user_id: order.user_id,
-                    title: 'অর্ডার বাতিলের অনুরোধ',
-                    message:
-                        'আপনি কি সত্যিই অর্ডারটি ক্যানসেল করতে চান?\n\nআমাদের প্লাটফর্মের বাইরে লেনদেন করে কোনো প্রকার প্রতারিত হলে আমরা দায়ী থাকবো না।',
-                    type: 'order_cancel_request',
-                    action_completed: false,
-                    order_id: order.id,
-                    is_read: false,
-                },
-            ])
-
-            if (error) throw error
-
-            showAppAlert(
-                'অনুরোধ পাঠানো হয়েছে',
-                'ক্রেতাকে বাতিলের অনুরোধ পাঠানো হয়েছে।'
-            )
-        } catch (err) {
-            if (__DEV__) {
-                console.log(err)
-            }
-            showAppAlert('সমস্যা', 'বাতিলের অনুরোধ পাঠানো যায়নি।')
-        } finally {
-            setUpdating(false)
-            setModalVisible(false)
-            setPendingStatus(null)
-        }
-    }
-
-    const notifyBuyerOrderCompleted = async () => {
-        if (!order?.user_id) return
-
-        try {
-            const { data: existing, error: existingError } = await supabase
-                .from('notifications')
-                .select('id')
-                .eq('order_id', order.id)
-                .eq('type', 'order_review_request')
-                .limit(1)
-
-            if (existingError) throw existingError
-            if (existing && existing.length > 0) return
-
-            const productName =
-                order.order_items?.[0]?.product_name_snapshot || 'your order'
-
-            const { error } = await supabase.from('notifications').insert([
-                {
-                    user_id: order.user_id,
-                    title: 'Order delivered — leave a review',
-                    message: `Your order for ${productName} is complete. Tap to rate the product.`,
-                    type: 'order_review_request',
-                    order_id: order.id,
-                    is_read: false,
-                    action_completed: false,
-                },
-            ])
-
-            if (error && __DEV__) {
-                console.log('Review notification error:', error)
-            }
-        } catch (err) {
-            if (__DEV__) {
-                console.log('Review notification error:', err)
-            }
-        }
-    }
-
     const confirmUpdate = async (statusToApply: string) => {
         if (!order || !statusToApply) return
         if (updating) return
         if (order.status?.toLowerCase() === 'hold') return
-
-        if (statusToApply === 'cancelled') {
-            await sendCancelRequest()
-            return
-        }
 
         const oldStatus = order.status
 
         try {
             setUpdating(true)
 
-            setOrder(prev =>
-                prev ? { ...prev, status: statusToApply } : prev
-            )
-
-            const { error } = await supabase
-                .from('orders')
-                .update({ status: statusToApply })
-                .eq('id', order.id)
-
-            if (error) throw error
-
-            if (
-                statusToApply === 'completed' &&
-                oldStatus?.toLowerCase() !== 'completed'
-            ) {
-                await notifyBuyerOrderCompleted()
+            if (statusToApply !== 'cancelled') {
+                setOrder(prev =>
+                    prev ? { ...prev, status: statusToApply } : prev
+                )
             }
 
+            const result = await updateSaleStatus(order.id, statusToApply)
+
+            if (statusToApply === 'cancelled' && result.cancelRequestSent) {
+                showAppAlert(
+                    'অনুরোধ পাঠানো হয়েছে',
+                    'ক্রেতাকে বাতিলের অনুরোধ পাঠানো হয়েছে।'
+                )
+            }
         } catch (err) {
             if (__DEV__) {
                 console.log(err)
             }
-            setOrder(prev =>
-                prev ? { ...prev, status: oldStatus } : prev
+            if (statusToApply !== 'cancelled') {
+                setOrder(prev =>
+                    prev ? { ...prev, status: oldStatus } : prev
+                )
+            }
+            const isDuplicate = err instanceof ApiError && err.status === 409
+            showAppAlert(
+                isDuplicate ? 'ইতিমধ্যে পাঠানো' : 'সমস্যা',
+                isDuplicate
+                    ? 'এই অর্ডারের জন্য বাতিলের অনুরোধ আগেই পাঠানো হয়েছে।'
+                    : 'স্ট্যাটাস আপডেট করা যায়নি।'
             )
         } finally {
             setUpdating(false)
@@ -264,7 +154,6 @@ const SalesDetails = () => {
     return (
         <View style={{ flex: 1, backgroundColor: '#f6f7fb' }}>
 
-            {/* HEADER */}
             <View style={styles.header}>
                 <Pressable onPress={() => navigation.goBack()}>
                     <Image
@@ -280,7 +169,6 @@ const SalesDetails = () => {
 
             <ScrollView contentContainerStyle={s.scroll}>
 
-                {/* ORDER */}
                 <Card>
                     <SectionTitle>Order</SectionTitle>
 
@@ -322,7 +210,6 @@ const SalesDetails = () => {
                     </View>
                 </Card>
 
-                {/* STATUS */}
                 <Card>
                     <SectionTitle>Status</SectionTitle>
 
@@ -344,7 +231,6 @@ const SalesDetails = () => {
                     )}
                 </Card>
 
-                {/* CUSTOMER */}
                 <Card>
                     <SectionTitle>Customer</SectionTitle>
                     <Info label="Name" value={order.full_name} />
@@ -352,7 +238,6 @@ const SalesDetails = () => {
                     <Info label="Email" value={order.email || 'N/A'} />
                 </Card>
 
-                {/* DELIVERY */}
                 <Card>
                     <SectionTitle>Delivery</SectionTitle>
                     <Info label="City" value={order.city} />
@@ -383,8 +268,6 @@ const SalesDetails = () => {
     )
 }
 
-/* ================= COMPONENTS ================= */
-
 const Card = ({ children }: any) => <View style={s.card}>{children}</View>
 
 const SectionTitle = ({ children }: any) => (
@@ -413,8 +296,6 @@ const StatusBtn = ({ label, onPress, active, danger, disabled }: any) => (
         </Text>
     </Pressable>
 )
-
-/* ================= STYLES ================= */
 
 const s = StyleSheet.create({
     center: { flex: 1, justifyContent: 'center', alignItems: 'center' },

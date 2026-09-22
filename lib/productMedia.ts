@@ -1,6 +1,6 @@
+import { apiRequest, apiUpload, filePartFromUri } from "@/lib/api";
 import { compressProductImage } from "@/lib/compressImage";
 import { isPreparedImageUri } from "@/lib/pickedImage";
-import { supabase } from "@/lib/supabase";
 
 const BUCKET = "product-images";
 
@@ -34,48 +34,47 @@ export type UploadedProductImage = {
   path: string;
 };
 
+function productIdFromFolder(folder?: string): string | null {
+  if (!folder) return null;
+  const match = folder.match(
+    /products\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i
+  );
+  return match?.[1] ?? null;
+}
+
 /**
- * Compress then upload a local image URI to the product-images bucket.
- * Throws on failure (callers should treat as hard error).
+ * Compress then upload via Express `/uploads/product-image`.
+ * `folder` may contain `products/{productId}/...` — productId is sent when present.
  */
 export async function uploadProductImage(
   uri: string,
-  folder: string
+  folder?: string
 ): Promise<UploadedProductImage> {
   const uploadUri = isPreparedImageUri(uri)
     ? uri
     : (await compressProductImage(uri)).uri;
 
-  const response = await fetch(uploadUri);
-  if (!response.ok) {
-    throw new Error("Failed to read compressed image");
+  const form = new FormData();
+  form.append(
+    "file",
+    filePartFromUri(uploadUri, `product_${Date.now()}.jpg`) as any
+  );
+
+  const productId = productIdFromFolder(folder);
+  if (productId) {
+    form.append("productId", productId);
   }
 
-  const arrayBuffer = await response.arrayBuffer();
-  if (!arrayBuffer.byteLength) {
-    throw new Error("Image file is empty");
+  const uploaded = await apiUpload<{ path: string; publicUrl: string }>(
+    "/uploads/product-image",
+    form
+  );
+
+  if (!uploaded?.path || !uploaded?.publicUrl) {
+    throw new Error("Image upload failed");
   }
 
-  const path = `${folder}/${Date.now()}_${Math.random()
-    .toString(36)
-    .slice(2, 9)}.jpg`;
-
-  const { data, error } = await supabase.storage
-    .from(BUCKET)
-    .upload(path, arrayBuffer, {
-      contentType: "image/jpeg",
-      upsert: false,
-    });
-
-  if (error || !data?.path) {
-    throw new Error(error?.message || "Image upload failed");
-  }
-
-  const { data: urlData } = supabase.storage
-    .from(BUCKET)
-    .getPublicUrl(data.path);
-
-  return { publicUrl: urlData.publicUrl, path: data.path };
+  return { publicUrl: uploaded.publicUrl, path: uploaded.path };
 }
 
 export function storagePathFromPublicUrl(publicUrl: string): string | null {
@@ -95,20 +94,25 @@ export async function removeProductStoragePaths(
   const unique = [...new Set(paths.filter(Boolean))];
   if (!unique.length) return;
 
-  const { error } = await supabase.storage.from(BUCKET).remove(unique);
-  if (error && __DEV__) {
-    console.warn("[productMedia] storage cleanup failed:", error);
+  try {
+    await apiRequest("/uploads/product-images", {
+      method: "DELETE",
+      body: { paths: unique },
+    });
+  } catch (error) {
+    if (__DEV__) {
+      console.warn("[productMedia] storage cleanup failed:", error);
+    }
   }
 }
 
 /** Soft-delete a product after a failed multi-step create. */
 export async function softDeleteProduct(productId: string): Promise<void> {
-  const { error } = await supabase
-    .from("products")
-    .update({ is_deleted: true, active: false })
-    .eq("id", productId);
-
-  if (error && __DEV__) {
-    console.warn("[productMedia] soft-delete failed:", error);
+  try {
+    await apiRequest(`/products/${productId}`, { method: "DELETE" });
+  } catch (error) {
+    if (__DEV__) {
+      console.warn("[productMedia] soft-delete failed:", error);
+    }
   }
 }

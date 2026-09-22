@@ -1,12 +1,12 @@
 import ConfirmModal from "@/components/modal/ConfirmModal";
 import { showAppAlert } from "@/context/AppAlertContext";
+import { fetchMyProfile } from "@/lib/catalogApi";
 import {
   FeaturedStoreRequest,
   fetchMyLatestFeaturedRequest,
   isSellerCurrentlyFeatured,
   submitFeaturedStoreRequest,
 } from "@/lib/featuredStoreRequests";
-import { supabase } from "@/lib/supabase";
 import { styles } from "@/styles/support";
 import { useNavigation } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
@@ -39,23 +39,7 @@ const FeaturedRequest = () => {
     try {
       setLoading(true);
 
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser();
-
-      if (userError || !user) {
-        throw new Error("User not authenticated");
-      }
-
-      const { data: profile, error: profileError } = await supabase
-        .from("profiles")
-        .select("store_type")
-        .eq("id", user.id)
-        .single();
-
-      if (profileError) throw profileError;
-
+      const { profile } = await fetchMyProfile();
       const wholesale = profile?.store_type === "wholesale";
       setIsWholesale(wholesale);
 
@@ -66,8 +50,8 @@ const FeaturedRequest = () => {
       }
 
       const [featured, request] = await Promise.all([
-        isSellerCurrentlyFeatured(user.id),
-        fetchMyLatestFeaturedRequest(user.id),
+        isSellerCurrentlyFeatured(),
+        fetchMyLatestFeaturedRequest(),
       ]);
 
       setAlreadyFeatured(featured);
@@ -99,17 +83,8 @@ const FeaturedRequest = () => {
     try {
       setSubmitting(true);
 
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser();
-
-      if (userError || !user) {
-        throw new Error("User not authenticated");
-      }
-
       await submitFeaturedStoreRequest(
-        user.id,
+        undefined,
         message.trim() ? message.trim() : null
       );
 

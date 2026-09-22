@@ -1,11 +1,19 @@
 import FeaturedStores from "@/components/home/FeaturedStores";
+import GridColumnSwitcher from "@/components/home/GridColumnSwitcher";
 import HomeCategories from "@/components/home/HomeCategories";
+import QuickActionsRow from "@/components/home/QuickActionsRow";
+import SellerFilterBar from "@/components/home/SellerFilterBar";
 import TopBar from "@/components/home/TopBar";
 import SingleProduct from "@/components/SingleProduct";
 import WholesalePromoBanner from "@/components/WholesalePromoBanner";
 import { useAdvertisedProducts } from "@/hooks/useAdvertisedProducts";
+import {
+  useCatalogPrefs,
+  type GridColumns,
+} from "@/hooks/useCatalogPrefs";
 import { useFeaturedStores } from "@/hooks/useFeaturedStores";
 import { useProfile } from "@/hooks/useProfile";
+import { useSellers } from "@/hooks/useSellers";
 import { useShuffledProductFeed } from "@/hooks/useShuffledProductFeed";
 import { AdvertisedProduct } from "@/lib/productAds";
 import { ProductFeedItem } from "@/lib/productFeed";
@@ -27,9 +35,26 @@ type RenderProps = {
   item: FeedRow;
 };
 
+const LIST_INSET = 24;
+
+function gapFor(columns: GridColumns) {
+  if (columns === 4) return 6;
+  if (columns === 3) return 8;
+  return 12;
+}
+
 export default function Index() {
   const { profile } = useProfile();
   const isWholesale = profile?.store_type === "wholesale";
+
+  const {
+    gridColumns,
+    setGridColumns,
+    categoriesExpanded,
+    toggleCategoriesExpanded,
+    homeMode,
+    setHomeMode,
+  } = useCatalogPrefs();
 
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(
     null
@@ -37,9 +62,12 @@ export default function Index() {
   const [selectedSubcategoryId, setSelectedSubcategoryId] = useState<
     string | null
   >(null);
+  const [selectedSellerId, setSelectedSellerId] = useState<string | null>(null);
 
   const categoryId = selectedCategoryId ?? undefined;
   const subcategoryId = selectedSubcategoryId ?? undefined;
+  const columnGap = gapFor(gridColumns);
+  const isManufacturers = homeMode === "manufacturers";
 
   const {
     products: advertisedProducts,
@@ -47,8 +75,8 @@ export default function Index() {
     loading: adsLoading,
     refetch: refetchAds,
   } = useAdvertisedProducts({
-    categoryId,
-    subcategoryId,
+    categoryId: isManufacturers ? undefined : categoryId,
+    subcategoryId: isManufacturers ? undefined : subcategoryId,
   });
 
   const {
@@ -59,10 +87,10 @@ export default function Index() {
     onRefresh,
     handleEndReached,
   } = useShuffledProductFeed({
-    categoryId,
-    subcategoryId,
-    excludeProductIds: advertisedIds,
-    // Wait until ads settle so exclude set is stable on first paint
+    categoryId: isManufacturers ? undefined : categoryId,
+    subcategoryId: isManufacturers ? undefined : subcategoryId,
+    sellerId: isManufacturers ? selectedSellerId ?? undefined : undefined,
+    excludeProductIds: isManufacturers ? [] : advertisedIds,
     enabled: !adsLoading,
   });
 
@@ -72,25 +100,70 @@ export default function Index() {
     refetch: refetchFeaturedStores,
   } = useFeaturedStores();
 
+  const {
+    sellers,
+    loading: sellersLoading,
+    refetch: refetchSellers,
+  } = useSellers({
+    storeType: "wholesale",
+    enabled: isManufacturers,
+  });
+
   const listData = useMemo<FeedRow[]>(() => {
+    if (isManufacturers) {
+      return visibleProducts;
+    }
     if (adsLoading) return [];
     const adIdSet = new Set(advertisedIds);
     const organic = visibleProducts.filter((p) => !adIdSet.has(p.id));
     return [...advertisedProducts, ...organic];
-  }, [adsLoading, advertisedProducts, advertisedIds, visibleProducts]);
+  }, [
+    isManufacturers,
+    adsLoading,
+    advertisedProducts,
+    advertisedIds,
+    visibleProducts,
+  ]);
+
+  const selectedSellerName = useMemo(() => {
+    if (!selectedSellerId) return null;
+    const seller = sellers.find((s) => s.id === selectedSellerId);
+    return (
+      seller?.store_name?.trim() ||
+      seller?.full_name?.trim() ||
+      "Seller"
+    );
+  }, [selectedSellerId, sellers]);
 
   const handleRefresh = useCallback(async () => {
     await Promise.all([
       refetchAds(),
       onRefresh(),
       refetchFeaturedStores(),
+      isManufacturers ? refetchSellers() : Promise.resolve(),
     ]);
-  }, [refetchAds, onRefresh, refetchFeaturedStores]);
+  }, [
+    refetchAds,
+    onRefresh,
+    refetchFeaturedStores,
+    isManufacturers,
+    refetchSellers,
+  ]);
 
   const feedTitle = useMemo(() => {
+    if (isManufacturers) {
+      return selectedSellerName
+        ? `${selectedSellerName}'s products`
+        : "Products from sellers";
+    }
     if (!selectedCategoryId) return "All Products";
     return selectedSubcategoryId ? "Products" : "Category Products";
-  }, [selectedCategoryId, selectedSubcategoryId]);
+  }, [
+    isManufacturers,
+    selectedSellerName,
+    selectedCategoryId,
+    selectedSubcategoryId,
+  ]);
 
   const renderItem = ({ item }: RenderProps) => (
     <SingleProduct
@@ -104,11 +177,47 @@ export default function Index() {
       moq={item.moq}
       productId={item.id}
       sponsored={!!item.isSponsored}
+      columns={gridColumns}
+      contentInset={LIST_INSET}
+      columnGap={columnGap}
     />
   );
 
-  const flatHeaderSection = useMemo(
-    () => (
+  const flatHeaderSection = useMemo(() => {
+    if (isManufacturers) {
+      return (
+        <View>
+          {isWholesale ? (
+            <WholesalePromoBanner href="/featuredRequest" />
+          ) : null}
+
+          <SellerFilterBar
+            sellers={sellers}
+            loading={sellersLoading}
+            selectedSellerId={selectedSellerId}
+            onSelectSeller={setSelectedSellerId}
+          />
+
+          <View style={styles.sectionHead}>
+            <View style={styles.sectionTitleRow}>
+              <Text style={styles.recommendedHeading}>{feedTitle}</Text>
+              <View style={styles.sectionSpacer} />
+              <GridColumnSwitcher
+                value={gridColumns}
+                onChange={setGridColumns}
+              />
+            </View>
+            {!selectedSellerId ? (
+              <Text style={styles.sectionHint}>
+                Showing all seller products · tap a store to filter
+              </Text>
+            ) : null}
+          </View>
+        </View>
+      );
+    }
+
+    return (
       <View>
         {isWholesale ? <WholesalePromoBanner href="/featuredRequest" /> : null}
 
@@ -117,6 +226,12 @@ export default function Index() {
           selectedSubcategoryId={selectedSubcategoryId}
           onSelectCategory={setSelectedCategoryId}
           onSelectSubcategory={setSelectedSubcategoryId}
+          expanded={categoriesExpanded}
+          onToggleExpanded={toggleCategoriesExpanded}
+        />
+
+        <QuickActionsRow
+          onBrowseSellers={() => setHomeMode("manufacturers")}
         />
 
         {!selectedCategoryId ? (
@@ -130,6 +245,11 @@ export default function Index() {
           <View style={styles.sectionTitleRow}>
             <View style={styles.sectionBar} />
             <Text style={styles.recommendedHeading}>{feedTitle}</Text>
+            <View style={styles.sectionSpacer} />
+            <GridColumnSwitcher
+              value={gridColumns}
+              onChange={setGridColumns}
+            />
           </View>
           {advertisedProducts.length > 0 ? (
             <Text style={styles.sectionHint}>
@@ -138,17 +258,25 @@ export default function Index() {
           ) : null}
         </View>
       </View>
-    ),
-    [
-      selectedCategoryId,
-      selectedSubcategoryId,
-      featuredStores,
-      featuredLoading,
-      feedTitle,
-      advertisedProducts.length,
-      isWholesale,
-    ]
-  );
+    );
+  }, [
+    isManufacturers,
+    isWholesale,
+    sellers,
+    sellersLoading,
+    selectedSellerId,
+    feedTitle,
+    gridColumns,
+    setGridColumns,
+    selectedCategoryId,
+    selectedSubcategoryId,
+    categoriesExpanded,
+    toggleCategoriesExpanded,
+    setHomeMode,
+    featuredStores,
+    featuredLoading,
+    advertisedProducts.length,
+  ]);
 
   const listFooter = () => {
     if (!loadingMore) return null;
@@ -165,7 +293,7 @@ export default function Index() {
   if (showInitialLoader) {
     return (
       <View style={styles.screen}>
-        <TopBar />
+        <TopBar activeMode={homeMode} onModeChange={setHomeMode} />
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#f5832b" />
         </View>
@@ -175,9 +303,10 @@ export default function Index() {
 
   return (
     <View style={styles.screen}>
-      <TopBar />
+      <TopBar activeMode={homeMode} onModeChange={setHomeMode} />
       <View style={styles.mainContainer}>
         <FlatList
+          key={`grid-${homeMode}-${gridColumns}-${selectedSellerId ?? "all"}`}
           data={listData}
           renderItem={renderItem}
           keyExtractor={(item) =>
@@ -187,16 +316,22 @@ export default function Index() {
           ListFooterComponent={listFooter}
           ListEmptyComponent={
             <View style={styles.emptyWrap}>
-              <Text style={styles.emptyTitle}>No products found</Text>
+              <Text style={styles.emptyTitle}>
+                {selectedSellerId
+                  ? "No products from this seller"
+                  : "No products found"}
+              </Text>
               <Text style={styles.emptyBody}>
-                Try another category or pull to refresh.
+                {selectedSellerId
+                  ? "Try another seller or open their profile."
+                  : "Try another category or pull to refresh."}
               </Text>
             </View>
           }
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
-          numColumns={2}
-          columnWrapperStyle={styles.productWrap}
+          numColumns={gridColumns}
+          columnWrapperStyle={[styles.productWrap, { gap: columnGap }]}
           onEndReached={handleEndReached}
           onEndReachedThreshold={0.5}
           refreshControl={
@@ -249,17 +384,22 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: "700",
     color: "#111827",
+    flexShrink: 1,
+  },
+  sectionSpacer: {
+    flex: 1,
+    minWidth: 8,
   },
   sectionHint: {
     marginTop: 4,
-    marginLeft: 11,
+    marginLeft: 2,
     fontSize: 12,
     color: "#9CA3AF",
     fontWeight: "500",
   },
   productWrap: {
     flexDirection: "row",
-    justifyContent: "space-between",
+    justifyContent: "flex-start",
     paddingBottom: 12,
   },
   listContent: {

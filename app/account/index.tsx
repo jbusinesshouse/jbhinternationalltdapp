@@ -4,7 +4,7 @@ import StoreProductSearch, {
     useStoreProductSearch,
 } from '@/components/StoreProductSearch'
 import { useProfile } from '@/hooks/useProfile'
-import { supabase } from '@/lib/supabase'
+import { deleteProduct, fetchAccountProducts } from '@/lib/catalogApi'
 import { styles } from '@/styles/profile'
 import { router, useNavigation } from 'expo-router'
 import React, { useEffect, useMemo, useState } from 'react'
@@ -54,37 +54,20 @@ const Account = () => {
         useStoreProductSearch(statusFiltered)
 
     // ---------------- FETCH ----------------
-    const fetchProducts = async (sellerId: string) => {
-        const { data, error } = await supabase
-            .from('products')
-            .select(`
-                id,
-                name,
-                price,
-                moq,
-                status,
-                product_images (
-                    image_url,
-                    is_main
-                )
-            `)
-            .eq('seller_id', sellerId)
-            .eq('is_deleted', false)
-            .order('created_at', { ascending: false })
-
-        if (error) {
+    const fetchProducts = async () => {
+        try {
+            const data = await fetchAccountProducts()
+            setProducts(data || [])
+        } catch (error) {
             if (__DEV__) {
                 console.log('PRODUCT ERROR:', error)
             }
-            return
         }
-
-        setProducts(data || [])
     }
 
     useEffect(() => {
         if (profile?.id && profile?.store_type === 'wholesale') {
-            fetchProducts(profile.id)
+            fetchProducts()
         }
     }, [profile?.id, profile?.store_type])
 
@@ -93,16 +76,12 @@ const Account = () => {
         if (!actionProduct || !actionType) return
 
         if (actionType === 'delete') {
-            const { error } = await supabase
-                .from('products')
-                .update({ is_deleted: true })
-                .eq('id', actionProduct.id)
-
-            if (!error) {
+            try {
+                await deleteProduct(actionProduct.id)
                 setProducts(prev =>
                     prev.filter(p => p.id !== actionProduct.id)
                 )
-            } else {
+            } catch (error) {
                 if (__DEV__) {
                     console.log('DELETE ERROR:', error)
                 }

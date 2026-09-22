@@ -1,5 +1,5 @@
 import SingleProduct from '@/components/SingleProduct';
-import { supabase } from '@/lib/supabase';
+import { searchProducts } from '@/lib/catalogApi';
 import { styles as prodStyles } from '@/styles/product';
 import { styles } from '@/styles/search';
 import { useLocalSearchParams, useNavigation } from 'expo-router';
@@ -23,6 +23,20 @@ type Product = {
     moq: number;
     productImg: string | null;
 };
+
+function mapSearchProduct(p: any): Product {
+    return {
+        id: p.id,
+        name: p.name,
+        price: p.price,
+        moq: p.moq,
+        productImg:
+            p.productImg ??
+            p.product_images?.find((img: any) => img.is_main)?.image_url ??
+            p.product_images?.[0]?.image_url ??
+            null,
+    };
+}
 
 const Search = () => {
     const { width, height } = useWindowDimensions();
@@ -49,93 +63,20 @@ const Search = () => {
         navigation.goBack();
     };
 
-    // ✅ smart search builder
-    const buildSearchTerms = (text: string) => {
-        const clean = text.toLowerCase().trim();
-        const parts = clean.split(/\s+/);
-        const compact = clean.replace(/\s/g, '');
-
-        return [...parts, clean, compact];
-    };
-
-    // ✅ fetch from DB
+    // ✅ fetch from API
     const fetchProducts = async (search: string) => {
         if (!search.trim()) return;
 
         setLoading(true);
 
         try {
-            // 1. Get current user and blocked list
-            const { data: { user } } = await supabase.auth.getUser();
-            let blockedUserIds: string[] = [];
-
-            if (user) {
-                const { data: blockData } = await supabase
-                    .from('blocks')
-                    .select('blocked_id')
-                    .eq('blocker_id', user.id);
-
-                if (blockData) {
-                    blockedUserIds = blockData.map((b: any) => b.blocked_id);
-                }
-            }
-
-            const terms = buildSearchTerms(search);
-
-            // 2. Initialize query with seller_id included
-            let queryBuilder = supabase
-                .from('products')
-                .select(`
-                id,
-                name,
-                price,
-                moq,
-                seller_id,
-                product_images (
-                    image_url,
-                    is_main
-                )
-            `)
-                .eq('is_deleted', false)
-                .eq("status", "active");
-
-            const orQuery = terms
-                .map(t => `name.ilike.%${t}%`)
-                .join(',');
-
-            // 3. Apply search terms
-            queryBuilder = queryBuilder.or(orQuery);
-
-            // 4. Apply the Block Filter if IDs exist
-            if (blockedUserIds.length > 0) {
-                queryBuilder = queryBuilder.not('seller_id', 'in', `(${blockedUserIds.join(',')})`);
-            }
-
-            const { data, error } = await queryBuilder;
-
-            if (error) {
-                if (__DEV__) {
-                    console.log('Search error:', error);
-                }
-                setProducts([]);
-                return;
-            }
-
-            const formatted: Product[] = (data || []).map((p: any) => ({
-                id: p.id,
-                name: p.name,
-                price: p.price,
-                moq: p.moq,
-                productImg:
-                    p.product_images?.find((img: any) => img.is_main)?.image_url ||
-                    null
-            }));
-
-            setProducts(formatted);
+            const data = await searchProducts(search);
+            setProducts((data || []).map(mapSearchProduct));
         } catch (err) {
             if (__DEV__) {
                 console.log('Search exception:', err);
             }
+            setProducts([]);
         } finally {
             setLoading(false);
         }

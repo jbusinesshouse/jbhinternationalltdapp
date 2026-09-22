@@ -1,3 +1,4 @@
+import { fetchOrderDetail } from '@/lib/catalogApi'
 import { getReviewEligibility } from '@/lib/productReviews'
 import { supabase } from '@/lib/supabase'
 import { styles } from '@/styles/profile'
@@ -61,73 +62,22 @@ const OrderDetails = () => {
         try {
             setLoading(true)
 
-            // 1. Fetch order
-            const { data, error } = await supabase
-                .from('orders')
-                .select(`
-                        *,
-                        order_items (
-                        quantity,
-                        price_snapshot,
-                        product_name_snapshot,
-                        product_variants (
-                            color
-                        ),
-                        product_sizes (
-                            size
-                        )
-                ),
-                        products (
-                            seller_id,
-                            product_images (
-                                image_url,
-                                is_main
-                            )
-                        )
-                `)
-                .eq('id', id)
-                .single()
+            const res = await fetchOrderDetail(id)
+            setOrder(res.order as Order)
+            setSeller(res.seller as Seller | null)
 
-            if (error) throw error
-            setOrder(data as any)
-
-            // 2. Fetch seller (from product.seller_id, not buyer user_id)
-            const product = Array.isArray(data?.products)
-                ? data.products[0]
-                : data?.products
-            const sellerId = product?.seller_id as string | undefined
-
-            if (sellerId) {
-                const { data: profileData, error: profileError } = await supabase
-                    .from('profiles')
-                    .select('full_name, phone, store_name')
-                    .eq('id', sellerId)
-                    .single()
-
-                if (profileError) {
-                    if (__DEV__) {
-                        console.log('Profile fetch error:', profileError)
-                    }
-                }
-                else setSeller(profileData)
-            } else {
-                setSeller(null)
-            }
-
-            // 3. Review eligibility when order is completed
-            const {
-                data: { user },
-            } = await supabase.auth.getUser()
-
-            if (user && String(data.status).toLowerCase() === 'completed') {
-                try {
+            if (res.review) {
+                setCanReview(Boolean(res.review.canReview))
+                setAlreadyReviewed(Boolean(res.review.alreadyReviewed))
+            } else if (String(res.order?.status).toLowerCase() === 'completed') {
+                const {
+                    data: { user },
+                } = await supabase.auth.getUser()
+                if (user) {
                     const eligibility = await getReviewEligibility(id, user.id)
                     setCanReview(eligibility.canReview)
                     setAlreadyReviewed(eligibility.alreadyReviewed)
-                } catch (reviewErr) {
-                    if (__DEV__) {
-                        console.log('Review eligibility error:', reviewErr)
-                    }
+                } else {
                     setCanReview(false)
                     setAlreadyReviewed(false)
                 }
@@ -135,7 +85,6 @@ const OrderDetails = () => {
                 setCanReview(false)
                 setAlreadyReviewed(false)
             }
-
         } catch (err) {
             console.log('Fetch order error:', err)
         } finally {

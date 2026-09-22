@@ -1,5 +1,10 @@
 import { showAppAlert } from '@/context/AppAlertContext'
-import { supabase } from '@/lib/supabase'
+import {
+    fetchMyProfile,
+    fetchNotifications as fetchNotificationsApi,
+    markNotificationRead,
+    respondToCancelRequest,
+} from '@/lib/catalogApi'
 import { styles } from '@/styles/profile'
 import { useNavigation, useRouter } from 'expo-router'
 import React, { useEffect, useState } from 'react'
@@ -34,24 +39,10 @@ const Notifications = () => {
 
     /* ================= FETCH ================= */
 
-    const fetchNotifications = async () => {
+    const loadNotifications = async () => {
         try {
             setLoading(true)
-
-            const {
-                data: { user }
-            } = await supabase.auth.getUser()
-
-            if (!user) return
-
-            const { data, error } = await supabase
-                .from('notifications')
-                .select('*')
-                .eq('user_id', user.id)
-                .order('created_at', { ascending: false })
-
-            if (error) throw error
-
+            const data = await fetchNotificationsApi()
             setNotifications(data || [])
         } catch (err) {
             if (__DEV__) {
@@ -62,32 +53,27 @@ const Notifications = () => {
         }
     }
 
-    const fetchProfile = async () => {
-        const { data: { user } } = await supabase.auth.getUser()
-        if (!user) return
-
-        const { data } = await supabase
-            .from('profiles')
-            .select('store_type')
-            .eq('id', user.id)
-            .single()
-
-        setStoreType(data?.store_type || null)
+    const loadProfile = async () => {
+        try {
+            const res = await fetchMyProfile()
+            setStoreType(res.profile?.store_type || null)
+        } catch (err) {
+            if (__DEV__) {
+                console.log('Fetch profile error:', err)
+            }
+        }
     }
 
     useEffect(() => {
-        fetchProfile()
-        fetchNotifications()
+        loadProfile()
+        loadNotifications()
     }, [])
 
     /* ================= MARK AS READ ================= */
 
     const markAsRead = async (id: string) => {
         try {
-            await supabase
-                .from('notifications')
-                .update({ is_read: true })
-                .eq('id', id)
+            await markNotificationRead(id)
 
             setNotifications(prev =>
                 prev.map(n =>
@@ -112,24 +98,11 @@ const Notifications = () => {
         try {
             setActingId(item.id)
 
-            const newStatus = decision === 'accept' ? 'cancelled' : 'hold'
-
-            const { error: orderError } = await supabase
-                .from('orders')
-                .update({ status: newStatus })
-                .eq('id', item.order_id)
-
-            if (orderError) throw orderError
-
-            const { error: notifError } = await supabase
-                .from('notifications')
-                .update({
-                    action_completed: true,
-                    is_read: true,
-                })
-                .eq('id', item.id)
-
-            if (notifError) throw notifError
+            await respondToCancelRequest(
+                item.order_id,
+                decision === 'accept',
+                item.id
+            )
 
             setNotifications(prev =>
                 prev.map(n =>

@@ -1,9 +1,7 @@
 import SingleProduct from "@/components/SingleProduct";
-import { useUser } from "@/context/UserContext";
 import { ProductFeedItem } from "@/lib/productFeed";
 import { AdvertisedProduct } from "@/lib/productAds";
 import { fetchRelatedProducts } from "@/lib/relatedProducts";
-import { supabase } from "@/lib/supabase";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -41,7 +39,6 @@ export default function RelatedProductsSection({
   categoryId,
   refreshKey = 0,
 }: RelatedProductsSectionProps) {
-  const { user } = useUser();
   const [sponsored, setSponsored] = useState<AdvertisedProduct[]>([]);
   const [organic, setOrganic] = useState<ProductFeedItem[]>([]);
   const [loading, setLoading] = useState(false);
@@ -55,21 +52,9 @@ export default function RelatedProductsSection({
 
     setLoading(true);
     try {
-      let blockedUserIds: string[] = [];
-      if (user?.id) {
-        const { data } = await supabase
-          .from("blocks")
-          .select("blocked_id")
-          .eq("blocker_id", user.id);
-        blockedUserIds = (data ?? []).map(
-          (row: { blocked_id: string }) => row.blocked_id
-        );
-      }
-
       const result = await fetchRelatedProducts({
         productId: String(productId),
         categoryId,
-        blockedUserIds,
       });
 
       setSponsored(result.sponsored);
@@ -83,7 +68,7 @@ export default function RelatedProductsSection({
     } finally {
       setLoading(false);
     }
-  }, [productId, categoryId, user?.id, refreshKey]);
+  }, [productId, categoryId, refreshKey]);
 
   useEffect(() => {
     load();

@@ -1,11 +1,18 @@
-import { supabase } from "@/lib/supabase";
+import {
+  fetchCategories,
+  fetchSubcategories,
+} from "@/lib/catalogApi";
+import Feather from "@expo/vector-icons/Feather";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  LayoutAnimation,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
+  UIManager,
   View,
 } from "react-native";
 
@@ -18,6 +25,13 @@ const ACCENTS = [
   "#be123c",
   "#4338ca",
 ];
+
+if (
+  Platform.OS === "android" &&
+  UIManager.setLayoutAnimationEnabledExperimental
+) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 
 export type HomeCategory = {
   id: string;
@@ -35,6 +49,8 @@ type HomeCategoriesProps = {
   selectedSubcategoryId: string | null;
   onSelectCategory: (categoryId: string | null) => void;
   onSelectSubcategory: (subcategoryId: string | null) => void;
+  expanded?: boolean;
+  onToggleExpanded?: () => void;
 };
 
 function getAccent(index: number) {
@@ -46,13 +62,15 @@ function getInitial(name: string) {
 }
 
 /**
- * Alibaba-style category + subcategory browse strip for Home.
+ * JBH category browse strip with simple chevron expand/collapse.
  */
 export default function HomeCategories({
   selectedCategoryId,
   selectedSubcategoryId,
   onSelectCategory,
   onSelectSubcategory,
+  expanded = false,
+  onToggleExpanded,
 }: HomeCategoriesProps) {
   const [categories, setCategories] = useState<HomeCategory[]>([]);
   const [subcategories, setSubcategories] = useState<HomeSubcategory[]>([]);
@@ -61,19 +79,19 @@ export default function HomeCategories({
   const load = useCallback(async () => {
     try {
       setLoading(true);
-      const [catRes, subRes] = await Promise.all([
-        supabase.from("categories").select("id, name").order("name"),
-        supabase
-          .from("subcategories")
-          .select("id, name, category_id")
-          .order("name"),
-      ]);
-
-      if (catRes.error) throw catRes.error;
-      if (subRes.error) throw subRes.error;
-
-      setCategories((catRes.data as HomeCategory[]) ?? []);
-      setSubcategories((subRes.data as HomeSubcategory[]) ?? []);
+      const cats = await fetchCategories();
+      const subArrays = await Promise.all(
+        cats.map(async (c) => {
+          const subs = await fetchSubcategories(c.id);
+          return subs.map((s) => ({
+            id: s.id,
+            name: s.name,
+            category_id: s.category_id ?? c.id,
+          }));
+        })
+      );
+      setCategories(cats);
+      setSubcategories(subArrays.flat());
     } catch (error) {
       if (__DEV__) {
         console.warn("[HomeCategories] load failed:", error);
@@ -99,6 +117,53 @@ export default function HomeCategories({
     return categories.find((c) => c.id === selectedCategoryId)?.name ?? null;
   }, [categories, selectedCategoryId]);
 
+  const handleChevron = () => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    onToggleExpanded?.();
+  };
+
+  const renderChip = (
+    key: string,
+    label: string,
+    active: boolean,
+    accent: string,
+    onPress: () => void,
+    isAll = false
+  ) => (
+    <Pressable
+      key={key}
+      onPress={onPress}
+      style={[styles.catChip, expanded && styles.catChipWrapped]}
+    >
+      <View
+        style={[
+          styles.catAvatar,
+          isAll
+            ? active
+              ? styles.catAvatarActive
+              : { backgroundColor: "#F3F4F6" }
+            : { backgroundColor: active ? PRIMARY : `${accent}18` },
+        ]}
+      >
+        <Text
+          style={[
+            styles.catInitial,
+            isAll && active && styles.catInitialActive,
+            !isAll && { color: active ? "#fff" : accent },
+          ]}
+        >
+          {isAll ? "All" : getInitial(label)}
+        </Text>
+      </View>
+      <Text
+        numberOfLines={2}
+        style={[styles.catLabel, active && styles.catLabelActive]}
+      >
+        {label}
+      </Text>
+    </Pressable>
+  );
+
   if (loading) {
     return (
       <View style={styles.container}>
@@ -111,11 +176,7 @@ export default function HomeCategories({
             <View key={`sk-${i}`} style={styles.skeletonChip} />
           ))}
         </View>
-        <ActivityIndicator
-          color={PRIMARY}
-          style={{ marginTop: 8 }}
-          size="small"
-        />
+        <ActivityIndicator color={PRIMARY} style={{ marginTop: 8 }} size="small" />
       </View>
     );
   }
@@ -123,6 +184,40 @@ export default function HomeCategories({
   if (categories.length === 0) {
     return null;
   }
+
+  const chips = (
+    <>
+      {renderChip(
+        "all",
+        "All",
+        !selectedCategoryId,
+        PRIMARY,
+        () => {
+          onSelectCategory(null);
+          onSelectSubcategory(null);
+        },
+        true
+      )}
+      {categories.map((cat, index) => {
+        const active = selectedCategoryId === cat.id;
+        return renderChip(
+          cat.id,
+          cat.name,
+          active,
+          getAccent(index),
+          () => {
+            if (active) {
+              onSelectCategory(null);
+              onSelectSubcategory(null);
+            } else {
+              onSelectCategory(cat.id);
+              onSelectSubcategory(null);
+            }
+          }
+        );
+      })}
+    </>
+  );
 
   return (
     <View style={styles.container}>
@@ -143,93 +238,38 @@ export default function HomeCategories({
         ) : null}
       </View>
 
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.catScroll}
-      >
-        <Pressable
-          onPress={() => {
-            onSelectCategory(null);
-            onSelectSubcategory(null);
-          }}
-          style={[
-            styles.catChip,
-            !selectedCategoryId && styles.catChipActive,
-          ]}
-        >
-          <View
-            style={[
-              styles.catAvatar,
-              !selectedCategoryId
-                ? styles.catAvatarActive
-                : { backgroundColor: "#F3F4F6" },
-            ]}
-          >
-            <Text
-              style={[
-                styles.catInitial,
-                !selectedCategoryId && styles.catInitialActive,
-              ]}
+      <View style={styles.barRow}>
+        <View style={styles.chipsArea}>
+          {expanded ? (
+            <View style={styles.catWrap}>{chips}</View>
+          ) : (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.catScroll}
             >
-              All
-            </Text>
-          </View>
-          <Text
-            numberOfLines={1}
-            style={[
-              styles.catLabel,
-              !selectedCategoryId && styles.catLabelActive,
-            ]}
-          >
-            All
-          </Text>
-        </Pressable>
+              {chips}
+            </ScrollView>
+          )}
+        </View>
 
-        {categories.map((cat, index) => {
-          const active = selectedCategoryId === cat.id;
-          const accent = getAccent(index);
-          return (
-            <Pressable
-              key={cat.id}
-              onPress={() => {
-                if (active) {
-                  onSelectCategory(null);
-                  onSelectSubcategory(null);
-                } else {
-                  onSelectCategory(cat.id);
-                  onSelectSubcategory(null);
-                }
-              }}
-              style={[styles.catChip, active && styles.catChipActive]}
-            >
-              <View
-                style={[
-                  styles.catAvatar,
-                  {
-                    backgroundColor: active ? PRIMARY : `${accent}18`,
-                  },
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.catInitial,
-                    { color: active ? "#fff" : accent },
-                  ]}
-                >
-                  {getInitial(cat.name)}
-                </Text>
-              </View>
-              <Text
-                numberOfLines={2}
-                style={[styles.catLabel, active && styles.catLabelActive]}
-              >
-                {cat.name}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </ScrollView>
+        <Pressable
+          onPress={handleChevron}
+          style={styles.chevronBtn}
+          hitSlop={10}
+          accessibilityRole="button"
+          accessibilityLabel={
+            expanded ? "Collapse categories" : "Expand categories"
+          }
+        >
+          <View style={styles.chevronDivider} />
+          <Feather
+            name={expanded ? "chevron-up" : "chevron-down"}
+            size={18}
+            color="#374151"
+          />
+        </Pressable>
+      </View>
 
       {selectedCategoryId && visibleSubs.length > 0 ? (
         <View style={styles.subSection}>
@@ -328,7 +368,20 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: PRIMARY,
   },
+  barRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+  },
+  chipsArea: {
+    flex: 1,
+  },
   catScroll: {
+    paddingHorizontal: 10,
+    gap: 10,
+  },
+  catWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
     paddingHorizontal: 10,
     gap: 10,
   },
@@ -336,8 +389,8 @@ const styles = StyleSheet.create({
     width: 72,
     alignItems: "center",
   },
-  catChipActive: {
-    opacity: 1,
+  catChipWrapped: {
+    marginBottom: 2,
   },
   catAvatar: {
     width: 54,
@@ -372,6 +425,19 @@ const styles = StyleSheet.create({
   catLabelActive: {
     color: "#111827",
     fontWeight: "700",
+  },
+  chevronBtn: {
+    width: 40,
+    height: 54,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  chevronDivider: {
+    width: StyleSheet.hairlineWidth,
+    height: 28,
+    backgroundColor: "#D1D5DB",
+    marginRight: 8,
   },
   subSection: {
     marginTop: 14,

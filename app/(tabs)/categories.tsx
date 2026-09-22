@@ -1,4 +1,4 @@
-import { supabase } from "@/lib/supabase";
+import { fetchCategories as fetchCategoriesApi } from "@/lib/catalogApi";
 import { useNavigation, useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import {
@@ -36,16 +36,11 @@ export default function Categories() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  const fetchCategories = useCallback(async (isRefresh = false) => {
+  const loadCategories = useCallback(async (isRefresh = false) => {
     if (!isRefresh) setLoading(true);
 
     try {
-      const { data, error } = await supabase
-        .from("categories")
-        .select("id, name")
-        .order("name", { ascending: true });
-
-      if (error) throw error;
+      const data = await fetchCategoriesApi();
       setCategories(data || []);
     } catch (error) {
       if (__DEV__) {
@@ -58,13 +53,13 @@ export default function Categories() {
   }, []);
 
   useEffect(() => {
-    fetchCategories();
-  }, [fetchCategories]);
+    loadCategories();
+  }, [loadCategories]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
-    fetchCategories(true);
-  }, [fetchCategories]);
+    loadCategories(true);
+  }, [loadCategories]);
 
   const renderItem = ({ item, index }: { item: CategoryProps; index: number }) => {
     const accent = getAccentColor(index);

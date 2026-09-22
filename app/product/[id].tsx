@@ -2,13 +2,14 @@ import HtmlRender from "@/components/htmlRender/HtmlRenter";
 import RelatedProductsSection from "@/components/product/RelatedProductsSection";
 import { showAppAlert } from "@/context/AppAlertContext";
 import { useUser } from "@/context/UserContext";
+import { fetchProductDetail } from "@/lib/catalogApi";
 import { findOrCreateChatRoom } from "@/lib/chat";
+import { promptLoginRequired } from "@/lib/guestAuth";
 import {
     ProductReview,
     fetchProductRatingSummary,
     fetchReviewsForProduct,
 } from "@/lib/productReviews";
-import { supabase } from "@/lib/supabase";
 import { styles } from "@/styles/product";
 import Feather from "@expo/vector-icons/Feather";
 import { router, useLocalSearchParams, useNavigation } from "expo-router";
@@ -32,7 +33,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 /* ================= TYPES ================= */
 
 type Product = {
-    id: number;
+    id: string;
     name: string;
     price: string;
     moq: number;
@@ -92,7 +93,8 @@ const DotsIndicator = ({ count, activeIndex, containerStyle }: DotsIndicatorProp
 const ProductPreview = () => {
     const { profile, user } = useUser();
 
-    const [storeType, setStoreType] = useState<string | null>(null);
+    const storeType =
+        (profile as { store_type?: string } | null)?.store_type ?? null;
     const [product, setProduct] = useState<Product | null>(null);
     const [variants, setVariants] = useState<Variant[]>([]);
     const [sizes, setSizes] = useState<Size[]>([]);
@@ -124,71 +126,79 @@ const ProductPreview = () => {
     const fetchProduct = async () => {
         if (!id) return;
 
-        const { data, error } = await supabase
-            .from("products")
-            .select(`
-                id,
-                name,
-                price,
-                moq,
-                description,
-                seller_id,
-                category_id,
-                subcategory_id,
-                selected_category,
-                product_images (
-                    image_url,
-                    is_main
-                ),
-                seller:profiles (
-                    id,
-                    store_name,
-                    avatar_url
-                ),
-                categories (
-                    id,
-                    name
-                ),
-                subcategories (
-                    id,
-                    name
-                )
-            `)
-            .eq("id", id)
-            .single();
+        try {
+            const { product: raw, rating } = await fetchProductDetail(String(id));
 
-        if (error) {
+            const sellerProfile = Array.isArray(raw.profiles)
+                ? raw.profiles[0]
+                : raw.profiles ?? raw.seller ?? null;
+
+            const images = [...(raw.product_images || [])].sort(
+                (a: any, b: any) => (a.sort_order ?? 0) - (b.sort_order ?? 0)
+            );
+
+            setProduct({
+                id: String(raw.id),
+                name: raw.name,
+                price: raw.price,
+                moq: raw.moq,
+                description: raw.description,
+                seller_id: raw.seller_id,
+                category_id: raw.category_id ?? null,
+                subcategory_id: raw.subcategory_id ?? null,
+                selected_category: raw.selected_category ?? null,
+                product_images: images,
+                seller: sellerProfile
+                    ? {
+                          id: sellerProfile.id ?? raw.seller_id,
+                          store_name: sellerProfile.store_name,
+                          avatar_url: sellerProfile.avatar_url ?? null,
+                      }
+                    : null,
+                categories: raw.categories
+                    ? Array.isArray(raw.categories)
+                        ? raw.categories[0] ?? null
+                        : raw.categories
+                    : null,
+                subcategories: raw.subcategories
+                    ? Array.isArray(raw.subcategories)
+                        ? raw.subcategories[0] ?? null
+                        : raw.subcategories
+                    : null,
+            });
+
+            if (rating) {
+                setRatingSummary({
+                    average: rating.average ?? 0,
+                    count: rating.count ?? 0,
+                });
+            }
+
+            const variantRows = raw.product_variants || [];
+            setVariants(
+                variantRows.map((v: any) => ({
+                    id: String(v.id),
+                    color: v.color,
+                }))
+            );
+
+            const sizeRows: Size[] = [];
+            for (const v of variantRows) {
+                for (const s of v.product_sizes || []) {
+                    sizeRows.push({
+                        id: String(s.id),
+                        size: s.size,
+                        stock: s.stock,
+                        variant_id: String(v.id),
+                    });
+                }
+            }
+            setSizes(sizeRows);
+        } catch (error) {
             if (__DEV__) {
                 console.log(error);
             }
-            return
         }
-
-        setProduct({
-            ...data,
-            seller: Array.isArray(data.seller)
-                ? data.seller[0]
-                : data.seller,
-            categories: Array.isArray(data.categories)
-                ? data.categories[0] ?? null
-                : data.categories ?? null,
-            subcategories: Array.isArray(data.subcategories)
-                ? data.subcategories[0] ?? null
-                : data.subcategories ?? null,
-        });
-    };
-
-    const fetchCurrentUser = async () => {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
-
-        const { data } = await supabase
-            .from("profiles")
-            .select("store_type")
-            .eq("id", user.id)
-            .single();
-
-        if (data) setStoreType(data.store_type);
     };
 
     const fetchReviews = async () => {
@@ -216,46 +226,16 @@ const ProductPreview = () => {
 
     const isBelowMoq = totalQty > 0 && totalQty < (product?.moq || 0);
 
-    /* ================= VARIANTS ================= */
-
-    const fetchVariants = async () => {
-        if (!id) return;
-
-        const { data: vData, error: vError } = await supabase
-            .from("product_variants")
-            .select("id, color")
-            .eq("product_id", id);
-
-        if (vError) return console.log(vError);
-
-        const variantsSafe = vData || [];
-
-        const { data: sData, error: sError } = await supabase
-            .from("product_sizes")
-            .select("id, size, stock, variant_id")
-            .in(
-                "variant_id",
-                variantsSafe.map((v) => v.id)
-            );
-
-        if (sError) return console.log(sError);
-
-        setVariants(variantsSafe);
-        setSizes(sData || []);
-    };
-
     /* ================= INIT ================= */
 
     useEffect(() => {
         fetchProduct();
-        fetchVariants();
-        fetchCurrentUser();
         fetchReviews();
     }, [id]);
 
     const onRefresh = async () => {
         setRefreshing(true);
-        await Promise.all([fetchProduct(), fetchVariants(), fetchReviews()]);
+        await Promise.all([fetchProduct(), fetchReviews()]);
         setRelatedRefreshKey((k) => k + 1);
         setRefreshing(false);
     };
@@ -398,8 +378,13 @@ const ProductPreview = () => {
     }
 
     const handleTextSeller = async () => {
-        if (!product || !user) {
-            showAppAlert('সাইন ইন প্রয়োজন', 'বিক্রেতাকে মেসেজ করতে সাইন ইন করুন।');
+        if (!product) return;
+
+        if (!user) {
+            promptLoginRequired(
+                'বিক্রেতাকে মেসেজ করতে সাইন ইন করুন।',
+                `/product/${product.id}`
+            );
             return;
         }
 
@@ -414,17 +399,13 @@ const ProductPreview = () => {
             ?? product.product_images?.[0]?.image_url
             ?? null;
 
-        const result = await findOrCreateChatRoom(
-            user.id,
-            product.seller_id,
-            {
-                productId: String(product.id),
-                name: product.name,
-                price: String(product.price),
-                moq: product.moq,
-                imageUrl: mainImage,
-            },
-        );
+        const result = await findOrCreateChatRoom(product.seller_id, {
+            productId: String(product.id),
+            name: product.name,
+            price: String(product.price),
+            moq: product.moq,
+            imageUrl: mainImage,
+        });
 
         setTextSellerLoading(false);
 
@@ -811,14 +792,19 @@ const ProductPreview = () => {
                 <View style={{ paddingVertical: 15, paddingHorizontal: 15, }}>
                     <Pressable
                         style={styles.reportBtn}
-                        onPress={
-                            () => {
-                                router.push({
-                                    pathname: "/report/[id]",
-                                    params: { id: product.id, type: 'product' }
-                                })
+                        onPress={() => {
+                            if (!user) {
+                                promptLoginRequired(
+                                    'রিপোর্ট করতে সাইন ইন করুন।',
+                                    `/product/${product.id}`
+                                );
+                                return;
                             }
-                        }
+                            router.push({
+                                pathname: "/report/[id]",
+                                params: { id: product.id, type: 'product' }
+                            });
+                        }}
                     >
                         <Image
                             source={(require('@/assets/images/icons/flag.png'))}
@@ -866,6 +852,14 @@ const ProductPreview = () => {
                     // Disable interaction if wholesale OR if account is not active
                     disabled={storeType === "wholesale" || (profile?.status && profile.status !== 'active')}
                     onPress={() => {
+                        if (!user) {
+                            promptLoginRequired(
+                                'অর্ডার করতে সাইন ইন করুন।',
+                                `/product/${product.id}`
+                            );
+                            return;
+                        }
+
                         // 0. Double check status in onPress (Safety check)
                         if (profile?.status && profile.status !== 'active') {
                             const statusBn =

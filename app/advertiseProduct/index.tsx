@@ -1,5 +1,6 @@
 import ConfirmModal from "@/components/modal/ConfirmModal";
 import { showAppAlert } from "@/context/AppAlertContext";
+import { fetchMyProfile } from "@/lib/catalogApi";
 import {
   AD_DURATION_DAYS,
   AD_PACKAGES,
@@ -10,7 +11,6 @@ import {
   fetchSellerProductsForAds,
   submitProductAdRequest,
 } from "@/lib/productAdRequests";
-import { supabase } from "@/lib/supabase";
 import { styles } from "@/styles/support";
 import { useNavigation } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
@@ -57,23 +57,7 @@ const AdvertiseProduct = () => {
     try {
       setLoading(true);
 
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser();
-
-      if (userError || !user) {
-        throw new Error("User not authenticated");
-      }
-
-      const { data: profile, error: profileError } = await supabase
-        .from("profiles")
-        .select("store_type")
-        .eq("id", user.id)
-        .single();
-
-      if (profileError) throw profileError;
-
+      const { profile } = await fetchMyProfile();
       const wholesale = profile?.store_type === "wholesale";
       setIsWholesale(wholesale);
 
@@ -84,8 +68,8 @@ const AdvertiseProduct = () => {
       }
 
       const [request, sellerProducts] = await Promise.all([
-        fetchMyLatestProductAdRequest(user.id),
-        fetchSellerProductsForAds(user.id),
+        fetchMyLatestProductAdRequest(),
+        fetchSellerProductsForAds(),
       ]);
 
       setLatestRequest(request);
@@ -134,17 +118,7 @@ const AdvertiseProduct = () => {
     try {
       setSubmitting(true);
 
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser();
-
-      if (userError || !user) {
-        throw new Error("User not authenticated");
-      }
-
       await submitProductAdRequest({
-        sellerId: user.id,
         productIds: selectedIds,
         sellTargetBdt: selectedPackage.sellTargetBdt,
         budgetBdt: selectedPackage.budgetBdt,

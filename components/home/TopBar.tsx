@@ -1,229 +1,238 @@
-import { useUser } from '@/context/UserContext'
-import { supabase } from '@/lib/supabase'
-import { router } from 'expo-router'
-import React, { useCallback, useEffect, useState } from 'react'
+import { useUser } from "@/context/UserContext";
+import type { HomeMode } from "@/hooks/useCatalogPrefs";
+import { fetchUnreadNotificationCount } from "@/lib/catalogApi";
+import { goToSignIn } from "@/lib/guestAuth";
+import { router } from "expo-router";
+import React, { useCallback, useEffect, useState } from "react";
 import {
-    Image,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
-} from 'react-native'
+  Image,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
 
-const TopBar = () => {
-    const { user, loading: authLoading } = useUser()
-    const [activeInd, setActiveInd] = useState(0)
-    const [searchVal, setSearchVal] = useState('')
+const PRIMARY = "#f5832b";
 
-    // 🔴 NEW: unread notifications count
-    const [unreadCount, setUnreadCount] = useState(0)
+const TABS: { key: HomeMode; label: string }[] = [
+  { key: "products", label: "Products" },
+  { key: "manufacturers", label: "Manufacturers" },
+];
 
-    const handleTopMenu = (i: number) => {
-        setActiveInd(i)
+type TopBarProps = {
+  activeMode?: HomeMode;
+  onModeChange?: (mode: HomeMode) => void;
+};
+
+/**
+ * JBH home header: Products / Manufacturers mode tabs + search.
+ * Keeps black brand chrome from the existing app.
+ */
+const TopBar = ({
+  activeMode = "products",
+  onModeChange,
+}: TopBarProps) => {
+  const { user, loading: authLoading } = useUser();
+  const [searchVal, setSearchVal] = useState("");
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  const handleSearch = () => {
+    if (!searchVal?.trim()) return;
+    router.push({
+      pathname: "/search/[query]",
+      params: { query: searchVal },
+    });
+  };
+
+  const fetchUnreadNotifications = useCallback(async () => {
+    try {
+      if (!user) return;
+      const count = await fetchUnreadNotificationCount();
+      setUnreadCount(count || 0);
+    } catch (err) {
+      if (__DEV__) {
+        console.log("Notification error:", err);
+      }
     }
+  }, [user]);
 
-    const handleInp = (text: string) => {
-        setSearchVal(text)
-    }
+  useEffect(() => {
+    if (authLoading) return;
+    fetchUnreadNotifications();
+    const interval = setInterval(fetchUnreadNotifications, 10000);
+    return () => clearInterval(interval);
+  }, [authLoading, fetchUnreadNotifications]);
 
-    const handleSearch = () => {
-        if (!searchVal?.trim()) return
-
-        router.push({
-            pathname: '/search/[query]',
-            params: { query: searchVal }
-        })
-    }
-
-    const fetchUnreadNotifications = useCallback(async () => {
-        try {
-            if (!user) return
-
-            const { count, error } = await supabase
-                .from('notifications')
-                .select('*', { count: 'exact', head: true })
-                .eq('user_id', user.id)
-                .eq('is_read', false)
-
-            if (error) {
-                if (__DEV__) {
-                    console.log('Notification fetch error:', error)
-                }
-                return
-            }
-
-            setUnreadCount(count || 0)
-
-        } catch (err) {
-            if (__DEV__) {
-                console.log('Notification error:', err)
-            }
-        }
-    }, [user])
-
-    useEffect(() => {
-        if (authLoading) return
-
-        fetchUnreadNotifications()
-
-        const interval = setInterval(fetchUnreadNotifications, 10000)
-
-        return () => clearInterval(interval)
-    }, [authLoading, fetchUnreadNotifications])
-
-    return (
-        <View style={styles.container}>
-            <View style={styles.TopMenuWrapper}>
-                <View style={styles.topMenuLeft}>
-                    {/* <TouchableOpacity onPress={() => handleTopMenu(0)}>
-                        <Text style={{
-                            ...styles.buttonText,
-                            borderBottomWidth: activeInd === 0 ? 2 : 0
-                        }}>
-                            All Products
-                        </Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity onPress={() => handleTopMenu(1)}>
-                        <Text style={{
-                            ...styles.buttonText,
-                            borderBottomWidth: activeInd === 1 ? 2 : 0
-                        }}>
-                            Top Sellers
-                        </Text>
-                    </TouchableOpacity> */}
-                    <Text style={styles.headingTitle}>Home</Text>
-                </View>
-
-                {/* 🔔 NOTIFICATION ICON + BADGE */}
-                <TouchableOpacity onPress={() => router.push('/notifications')}>
-                    <View style={{ position: 'relative' }}>
-                        <Image
-                            source={require('@/assets/images/icons/bell.png')}
-                            style={styles.notiImage}
-                        />
-
-                        {unreadCount > 0 && (
-                            <View style={styles.badge}>
-                                <Text style={styles.badgeText}>
-                                    {unreadCount > 9 ? '9+' : unreadCount}
-                                </Text>
-                            </View>
-                        )}
-                    </View>
-                </TouchableOpacity>
-            </View>
-
-            <View style={styles.searchWrapper}>
-                <TextInput
-                    style={styles.searchInp}
-                    placeholder='Search For Products'
-                    placeholderTextColor="#9CA3AF"
-                    value={searchVal}
-                    onChangeText={handleInp}
-                />
-
-                <TouchableOpacity style={styles.searchBtn} onPress={handleSearch}>
-                    <Image
-                        source={require('@/assets/images/icons/search.png')}
-                        style={styles.searchImg}
-                    />
-                </TouchableOpacity>
-            </View>
+  return (
+    <View style={styles.container}>
+      <View style={styles.topRow}>
+        <View style={styles.tabs}>
+          {TABS.map((tab) => {
+            const active = activeMode === tab.key;
+            return (
+              <Pressable
+                key={tab.key}
+                onPress={() => onModeChange?.(tab.key)}
+                style={styles.tabBtn}
+                hitSlop={4}
+              >
+                <Text style={[styles.tabText, active && styles.tabTextActive]}>
+                  {tab.label}
+                </Text>
+                {active ? <View style={styles.tabUnderline} /> : null}
+              </Pressable>
+            );
+          })}
         </View>
-    )
-}
 
-export default TopBar
+        <TouchableOpacity
+          onPress={() => {
+            if (!user) {
+              goToSignIn("/notifications");
+              return;
+            }
+            router.push("/notifications");
+          }}
+        >
+          <View style={styles.bellWrap}>
+            <Image
+              source={require("@/assets/images/icons/bell.png")}
+              style={styles.notiImage}
+            />
+            {unreadCount > 0 ? (
+              <View style={styles.badge}>
+                <Text style={styles.badgeText}>
+                  {unreadCount > 9 ? "9+" : unreadCount}
+                </Text>
+              </View>
+            ) : null}
+          </View>
+        </TouchableOpacity>
+      </View>
 
+      <View style={styles.searchWrapper}>
+        <TextInput
+          style={styles.searchInp}
+          placeholder="Search For Products"
+          placeholderTextColor="#9CA3AF"
+          value={searchVal}
+          onChangeText={setSearchVal}
+          returnKeyType="search"
+          onSubmitEditing={handleSearch}
+        />
+        <TouchableOpacity style={styles.searchBtn} onPress={handleSearch}>
+          <Image
+            source={require("@/assets/images/icons/search.png")}
+            style={styles.searchImg}
+          />
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+};
+
+export default TopBar;
 
 const styles = StyleSheet.create({
-    container: {
-        paddingTop: 50,
-        paddingBottom: 18,
-        paddingHorizontal: 15,
-        backgroundColor: '#000000',
-        borderBottomLeftRadius: 0,
-        borderBottomRightRadius: 0,
-    },
-    TopMenuWrapper: {
-        display: 'flex',
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 16,
-    },
-    topMenuLeft: {
-        display: 'flex',
-        flexDirection: 'row',
-        gap: 30,
-    },
-    notiImage: {
-        width: 23,
-        height: 23,
-        filter: 'invert(1)',
-    },
-    buttonText: {
-        color: '#ffffff',
-        fontSize: 17,
-        paddingBottom: 5,
-        borderBottomColor: '#ffffff'
-    },
-    headingTitle: {
-        color: '#ffffff',
-        fontSize: 22,
-        fontWeight: '700',
-        letterSpacing: 0.2,
-    },
-    badge: {
-        position: 'absolute',
-        top: -6,
-        right: -6,
-        backgroundColor: '#f5832b',
-        minWidth: 18,
-        height: 18,
-        borderRadius: 9,
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingHorizontal: 4,
-        borderWidth: 1.5,
-        borderColor: '#000000',
-    },
-
-    badgeText: {
-        color: '#fff',
-        fontSize: 10,
-        fontWeight: '700',
-    },
-    searchWrapper: {
-        width: '100%',
-        position: 'relative',
-    },
-    searchInp: {
-        height: 48,
-        borderRadius: 12,
-        paddingLeft: 16,
-        paddingRight: 72,
-        fontSize: 15,
-        color: '#111827',
-        backgroundColor: '#ffffff',
-    },
-    searchBtn: {
-        width: 52,
-        height: 38,
-        backgroundColor: '#f5832b',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        borderRadius: 10,
-        position: 'absolute',
-        top: 5,
-        right: 5,
-    },
-    searchImg: {
-        width: 22,
-        height: 22,
-        filter: 'invert(1)',
-    },
-})
+  container: {
+    paddingTop: 50,
+    paddingBottom: 14,
+    paddingHorizontal: 15,
+    backgroundColor: "#000000",
+  },
+  topRow: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    justifyContent: "space-between",
+    marginBottom: 14,
+  },
+  tabs: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "flex-end",
+    gap: 16,
+  },
+  tabBtn: {
+    paddingBottom: 8,
+    position: "relative",
+  },
+  tabText: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: "rgba(255,255,255,0.65)",
+  },
+  tabTextActive: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: "#ffffff",
+  },
+  tabUnderline: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: PRIMARY,
+  },
+  bellWrap: {
+    position: "relative",
+    marginBottom: 6,
+    marginLeft: 8,
+  },
+  notiImage: {
+    width: 22,
+    height: 22,
+    filter: "invert(1)",
+  },
+  badge: {
+    position: "absolute",
+    top: -6,
+    right: -6,
+    backgroundColor: PRIMARY,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 4,
+    borderWidth: 1.5,
+    borderColor: "#000000",
+  },
+  badgeText: {
+    color: "#fff",
+    fontSize: 10,
+    fontWeight: "700",
+  },
+  searchWrapper: {
+    width: "100%",
+    position: "relative",
+  },
+  searchInp: {
+    height: 48,
+    borderRadius: 12,
+    paddingLeft: 16,
+    paddingRight: 72,
+    fontSize: 15,
+    color: "#111827",
+    backgroundColor: "#ffffff",
+  },
+  searchBtn: {
+    width: 52,
+    height: 38,
+    backgroundColor: PRIMARY,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 10,
+    position: "absolute",
+    top: 5,
+    right: 5,
+  },
+  searchImg: {
+    width: 22,
+    height: 22,
+    filter: "invert(1)",
+  },
+});

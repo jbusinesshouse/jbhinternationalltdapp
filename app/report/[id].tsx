@@ -1,5 +1,5 @@
 import { showAppAlert } from '@/context/AppAlertContext';
-import { supabase } from '@/lib/supabase';
+import { submitReport } from '@/lib/catalogApi';
 import { styles } from '@/styles/support';
 import { Picker } from '@react-native-picker/picker';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -30,7 +30,7 @@ const ReportScreen = () => {
         "scam",
         "inappropriate",
         "other",
-    ];
+    ] as const;
 
     const handleSubmit = async () => {
         if (!reason || !details.trim()) {
@@ -41,24 +41,13 @@ const ReportScreen = () => {
         try {
             setSubmitting(true);
 
-            const { data: userData, error: userError } = await supabase.auth.getUser();
-            if (userError || !userData.user) throw new Error('User not authenticated');
-
-            // 📩 Insert based on your schema
-            const { error: insertError } = await supabase
-                .from('reports')
-                .insert({
-                    reporter_id: userData.user.id,
-                    target_type: type === 'product' ? 'product' : 'user',
-                    // Map the 'id' to the correct column based on 'type'
-                    product_id: type === 'product' ? id : null,
-                    profile_id: type === 'profile' ? id : null,
-                    reason: reason,
-                    details: details.trim(),
-                    status: 'pending'
-                });
-
-            if (insertError) throw insertError;
+            await submitReport({
+                targetType: type === 'product' ? 'product' : 'user',
+                productId: type === 'product' ? id : null,
+                profileId: type === 'profile' ? id : null,
+                reason: reason as 'spam' | 'scam' | 'inappropriate' | 'other',
+                details: details.trim(),
+            });
 
             const typeLabel = type === 'product' ? 'প্রোডাক্ট' : 'ইউজার';
             showAppAlert(
