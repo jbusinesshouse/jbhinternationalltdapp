@@ -7,15 +7,16 @@ import { memo, useCallback, useMemo } from "react";
 import {
   Image,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   View,
 } from "react-native";
+import { ScrollView } from "react-native-gesture-handler";
 
 type FeaturedStoresProps = {
   stores: FeaturedStore[];
   loading: boolean;
+  onNestedHorizontalFocus?: (focused: boolean) => void;
 };
 
 const SKELETON_PER_ROW = 6;
@@ -32,7 +33,11 @@ function StoreRow({ stores }: { stores: FeaturedStore[] }) {
   );
 }
 
-function FeaturedStoresSkeleton() {
+function FeaturedStoresSkeleton({
+  onNestedHorizontalFocus,
+}: {
+  onNestedHorizontalFocus?: (focused: boolean) => void;
+}) {
   return (
     <View style={styles.container}>
       <View style={styles.headingPlaceholder} />
@@ -40,6 +45,11 @@ function FeaturedStoresSkeleton() {
         horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
+        nestedScrollEnabled
+        directionalLockEnabled
+        onTouchStart={() => onNestedHorizontalFocus?.(true)}
+        onTouchEnd={() => onNestedHorizontalFocus?.(false)}
+        onTouchCancel={() => onNestedHorizontalFocus?.(false)}
       >
         <View style={styles.rows}>
           <View style={styles.row}>
@@ -98,7 +108,11 @@ function FeaturedStoreItem({ store }: { store: FeaturedStore }) {
 
 const MemoFeaturedStoreItem = memo(FeaturedStoreItem);
 
-function FeaturedStores({ stores, loading }: FeaturedStoresProps) {
+function FeaturedStores({
+  stores,
+  loading,
+  onNestedHorizontalFocus,
+}: FeaturedStoresProps) {
   const { topRow, bottomRow } = useMemo(() => {
     return {
       topRow: stores.slice(0, FEATURED_STORES_PER_ROW),
@@ -110,7 +124,11 @@ function FeaturedStores({ stores, loading }: FeaturedStoresProps) {
   }, [stores]);
 
   if (loading) {
-    return <FeaturedStoresSkeleton />;
+    return (
+      <FeaturedStoresSkeleton
+        onNestedHorizontalFocus={onNestedHorizontalFocus}
+      />
+    );
   }
 
   if (stores.length === 0) {
@@ -124,6 +142,11 @@ function FeaturedStores({ stores, loading }: FeaturedStoresProps) {
         horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
+        nestedScrollEnabled
+        directionalLockEnabled
+        onTouchStart={() => onNestedHorizontalFocus?.(true)}
+        onTouchEnd={() => onNestedHorizontalFocus?.(false)}
+        onTouchCancel={() => onNestedHorizontalFocus?.(false)}
       >
         {/*
           Two stacked rows share one horizontal scroll.

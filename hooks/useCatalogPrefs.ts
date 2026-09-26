@@ -15,10 +15,10 @@ type CatalogPrefs = StoredCatalogPrefs & {
   homeMode: HomeMode;
 };
 
-const STORAGE_KEY = "@jbh/catalog_prefs_v4";
+const STORAGE_KEY = "@jbh/catalog_prefs_v5";
 
 const DEFAULTS: CatalogPrefs = {
-  gridColumns: 2,
+  gridColumns: 4,
   categoriesExpanded: false,
   homeMode: "products",
 };
@@ -29,10 +29,7 @@ function isGridColumns(v: unknown): v is GridColumns {
 
 async function readStoredPrefs(): Promise<StoredCatalogPrefs> {
   try {
-    const raw =
-      (await AsyncStorage.getItem(STORAGE_KEY)) ??
-      (await AsyncStorage.getItem("@jbh/catalog_prefs_v3")) ??
-      (await AsyncStorage.getItem("@jbh/catalog_prefs_v2"));
+    const raw = await AsyncStorage.getItem(STORAGE_KEY);
     if (!raw) {
       return {
         gridColumns: DEFAULTS.gridColumns,
@@ -47,9 +44,7 @@ async function readStoredPrefs(): Promise<StoredCatalogPrefs> {
       categoriesExpanded:
         typeof parsed.categoriesExpanded === "boolean"
           ? parsed.categoriesExpanded
-          : typeof parsed.filterVisibleRows === "number"
-            ? parsed.filterVisibleRows > 1
-            : DEFAULTS.categoriesExpanded,
+          : DEFAULTS.categoriesExpanded,
     };
   } catch {
     return {

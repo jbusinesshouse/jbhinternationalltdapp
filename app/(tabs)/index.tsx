@@ -10,6 +10,7 @@ import { useAdvertisedProducts } from "@/hooks/useAdvertisedProducts";
 import {
   useCatalogPrefs,
   type GridColumns,
+  type HomeMode,
 } from "@/hooks/useCatalogPrefs";
 import { useFeaturedStores } from "@/hooks/useFeaturedStores";
 import { useProfile } from "@/hooks/useProfile";
@@ -17,15 +18,23 @@ import { useSellers } from "@/hooks/useSellers";
 import { useShuffledProductFeed } from "@/hooks/useShuffledProductFeed";
 import { AdvertisedProduct } from "@/lib/productAds";
 import { ProductFeedItem } from "@/lib/productFeed";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
   RefreshControl,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
 } from "react-native";
+import Animated, {
+  runOnJS,
+  useAnimatedScrollHandler,
+  useSharedValue,
+} from "react-native-reanimated";
 
 type FeedRow = (ProductFeedItem | AdvertisedProduct) & {
   isSponsored?: boolean;
@@ -36,6 +45,7 @@ type RenderProps = {
 };
 
 const LIST_INSET = 24;
+const MODE_ORDER: HomeMode[] = ["products", "manufacturers"];
 
 function gapFor(columns: GridColumns) {
   if (columns === 4) return 6;
@@ -43,7 +53,14 @@ function gapFor(columns: GridColumns) {
   return 12;
 }
 
+function modeToIndex(mode: HomeMode) {
+  return MODE_ORDER.indexOf(mode);
+}
+
 export default function Index() {
+  const { width: windowWidth } = useWindowDimensions();
+  const pageWidth = Math.max(windowWidth, 1);
+
   const { profile } = useProfile();
   const isWholesale = profile?.store_type === "wholesale";
 
@@ -63,11 +80,39 @@ export default function Index() {
     string | null
   >(null);
   const [selectedSellerId, setSelectedSellerId] = useState<string | null>(null);
+  const [manufacturersVisited, setManufacturersVisited] = useState(false);
+  /** Pause Products↔Manufacturers pager while nested horizontal strips are touched */
+  const [pagerScrollEnabled, setPagerScrollEnabled] = useState(true);
+
+  const onNestedHorizontalFocus = useCallback((focused: boolean) => {
+    setPagerScrollEnabled(!focused);
+  }, []);
+
+  const pagerRef = useRef<Animated.ScrollView>(null);
+  const homeModeRef = useRef(homeMode);
+  homeModeRef.current = homeMode;
+
+  const scrollX = useSharedValue(modeToIndex(homeMode) * pageWidth);
+  const pageWidthSV = useSharedValue(pageWidth);
+  const mfgVisitMarked = useSharedValue(manufacturersVisited ? 1 : 0);
 
   const categoryId = selectedCategoryId ?? undefined;
   const subcategoryId = selectedSubcategoryId ?? undefined;
   const columnGap = gapFor(gridColumns);
   const isManufacturers = homeMode === "manufacturers";
+
+  useEffect(() => {
+    if (isManufacturers) setManufacturersVisited(true);
+  }, [isManufacturers]);
+
+  useEffect(() => {
+    pageWidthSV.value = pageWidth;
+    scrollX.value = modeToIndex(homeModeRef.current) * pageWidth;
+  }, [pageWidth, pageWidthSV, scrollX]);
+
+  useEffect(() => {
+    if (manufacturersVisited) mfgVisitMarked.value = 1;
+  }, [manufacturersVisited, mfgVisitMarked]);
 
   const {
     products: advertisedProducts,
@@ -75,23 +120,20 @@ export default function Index() {
     loading: adsLoading,
     refetch: refetchAds,
   } = useAdvertisedProducts({
-    categoryId: isManufacturers ? undefined : categoryId,
-    subcategoryId: isManufacturers ? undefined : subcategoryId,
+    categoryId,
+    subcategoryId,
   });
 
-  const {
-    visibleProducts,
-    initializing,
-    refreshing,
-    loadingMore,
-    onRefresh,
-    handleEndReached,
-  } = useShuffledProductFeed({
-    categoryId: isManufacturers ? undefined : categoryId,
-    subcategoryId: isManufacturers ? undefined : subcategoryId,
-    sellerId: isManufacturers ? selectedSellerId ?? undefined : undefined,
-    excludeProductIds: isManufacturers ? [] : advertisedIds,
+  const productsFeed = useShuffledProductFeed({
+    categoryId,
+    subcategoryId,
+    excludeProductIds: advertisedIds,
     enabled: !adsLoading,
+  });
+
+  const manufacturersFeed = useShuffledProductFeed({
+    sellerId: selectedSellerId ?? undefined,
+    enabled: manufacturersVisited,
   });
 
   const {
@@ -106,24 +148,27 @@ export default function Index() {
     refetch: refetchSellers,
   } = useSellers({
     storeType: "wholesale",
-    enabled: isManufacturers,
+    enabled: manufacturersVisited,
   });
 
-  const listData = useMemo<FeedRow[]>(() => {
-    if (isManufacturers) {
-      return visibleProducts;
-    }
+  const productsListData = useMemo<FeedRow[]>(() => {
     if (adsLoading) return [];
     const adIdSet = new Set(advertisedIds);
-    const organic = visibleProducts.filter((p) => !adIdSet.has(p.id));
+    const organic = productsFeed.visibleProducts.filter(
+      (p) => !adIdSet.has(p.id)
+    );
     return [...advertisedProducts, ...organic];
   }, [
-    isManufacturers,
     adsLoading,
     advertisedProducts,
     advertisedIds,
-    visibleProducts,
+    productsFeed.visibleProducts,
   ]);
+
+  const manufacturersListData = useMemo<FeedRow[]>(
+    () => manufacturersFeed.visibleProducts,
+    [manufacturersFeed.visibleProducts]
+  );
 
   const selectedSellerName = useMemo(() => {
     if (!selectedSellerId) return null;
@@ -135,89 +180,93 @@ export default function Index() {
     );
   }, [selectedSellerId, sellers]);
 
-  const handleRefresh = useCallback(async () => {
-    await Promise.all([
-      refetchAds(),
-      onRefresh(),
-      refetchFeaturedStores(),
-      isManufacturers ? refetchSellers() : Promise.resolve(),
-    ]);
-  }, [
-    refetchAds,
-    onRefresh,
-    refetchFeaturedStores,
-    isManufacturers,
-    refetchSellers,
-  ]);
-
-  const feedTitle = useMemo(() => {
-    if (isManufacturers) {
-      return selectedSellerName
-        ? `${selectedSellerName}'s products`
-        : "Products from sellers";
-    }
-    if (!selectedCategoryId) return "All Products";
-    return selectedSubcategoryId ? "Products" : "Category Products";
-  }, [
-    isManufacturers,
-    selectedSellerName,
-    selectedCategoryId,
-    selectedSubcategoryId,
-  ]);
-
-  const renderItem = ({ item }: RenderProps) => (
-    <SingleProduct
-      productImg={
-        item.productImg
-          ? { uri: item.productImg }
-          : require("@/assets/images/product1.png")
-      }
-      title={item.name}
-      price={item.price}
-      moq={item.moq}
-      productId={item.id}
-      sponsored={!!item.isSponsored}
-      columns={gridColumns}
-      contentInset={LIST_INSET}
-      columnGap={columnGap}
-    />
+  const scrollToMode = useCallback(
+    (mode: HomeMode, animated = true) => {
+      pagerRef.current?.scrollTo({
+        x: modeToIndex(mode) * pageWidth,
+        y: 0,
+        animated,
+      });
+    },
+    [pageWidth]
   );
 
-  const flatHeaderSection = useMemo(() => {
-    if (isManufacturers) {
-      return (
-        <View>
-          {isWholesale ? (
-            <WholesalePromoBanner href="/featuredRequest" />
-          ) : null}
+  const handleModeChange = useCallback(
+    (mode: HomeMode) => {
+      if (mode === "manufacturers") setManufacturersVisited(true);
+      setHomeMode(mode);
+      scrollToMode(mode, true);
+    },
+    [setHomeMode, scrollToMode]
+  );
 
-          <SellerFilterBar
-            sellers={sellers}
-            loading={sellersLoading}
-            selectedSellerId={selectedSellerId}
-            onSelectSeller={setSelectedSellerId}
-          />
+  // Keep pager aligned after rotation / width changes
+  useEffect(() => {
+    scrollToMode(homeModeRef.current, false);
+  }, [pageWidth, scrollToMode]);
 
-          <View style={styles.sectionHead}>
-            <View style={styles.sectionTitleRow}>
-              <Text style={styles.recommendedHeading}>{feedTitle}</Text>
-              <View style={styles.sectionSpacer} />
-              <GridColumnSwitcher
-                value={gridColumns}
-                onChange={setGridColumns}
-              />
-            </View>
-            {!selectedSellerId ? (
-              <Text style={styles.sectionHint}>
-                Showing all seller products · tap a store to filter
-              </Text>
-            ) : null}
-          </View>
-        </View>
-      );
-    }
+  const markManufacturersVisited = useCallback(() => {
+    setManufacturersVisited(true);
+  }, []);
 
-    return (
+  const handlePagerScroll = useAnimatedScrollHandler({
+    onScroll: (e) => {
+      "worklet";
+      scrollX.value = e.contentOffset.x;
+      const width = Math.max(pageWidthSV.value, 1);
+      if (mfgVisitMarked.value === 0 && e.contentOffset.x > width * 0.08) {
+        mfgVisitMarked.value = 1;
+        runOnJS(markManufacturersVisited)();
+      }
+    },
+  });
+
+  const handlePagerScrollEnd = useCallback(
+    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+      if (pageWidth <= 0) return;
+      const index = Math.round(e.nativeEvent.contentOffset.x / pageWidth);
+      const nextMode = MODE_ORDER[Math.max(0, Math.min(1, index))] ?? "products";
+      if (nextMode === "manufacturers") setManufacturersVisited(true);
+      if (nextMode !== homeMode) setHomeMode(nextMode);
+    },
+    [homeMode, pageWidth, setHomeMode]
+  );
+
+  const handleProductsRefresh = useCallback(async () => {
+    await Promise.all([
+      refetchAds(),
+      productsFeed.onRefresh(),
+      refetchFeaturedStores(),
+    ]);
+  }, [refetchAds, productsFeed.onRefresh, refetchFeaturedStores]);
+
+  const handleManufacturersRefresh = useCallback(async () => {
+    await Promise.all([manufacturersFeed.onRefresh(), refetchSellers()]);
+  }, [manufacturersFeed.onRefresh, refetchSellers]);
+
+  const renderItem = useCallback(
+    ({ item }: RenderProps) => (
+      <SingleProduct
+        productImg={
+          item.productImg
+            ? { uri: item.productImg }
+            : require("@/assets/images/product1.png")
+        }
+        title={item.name}
+        price={item.price}
+        moq={item.moq}
+        productId={item.id}
+        sponsored={!!item.isSponsored}
+        columns={gridColumns}
+        contentInset={LIST_INSET}
+        columnGap={columnGap}
+      />
+    ),
+    [gridColumns, columnGap]
+  );
+
+  const productsHeader = useMemo(
+    () => (
       <View>
         {isWholesale ? <WholesalePromoBanner href="/featuredRequest" /> : null}
 
@@ -228,122 +277,277 @@ export default function Index() {
           onSelectSubcategory={setSelectedSubcategoryId}
           expanded={categoriesExpanded}
           onToggleExpanded={toggleCategoriesExpanded}
+          onNestedHorizontalFocus={onNestedHorizontalFocus}
         />
 
         <QuickActionsRow
-          onBrowseSellers={() => setHomeMode("manufacturers")}
+          onBrowseSellers={() => handleModeChange("manufacturers")}
         />
 
         {!selectedCategoryId ? (
           <FeaturedStores
             stores={featuredStores}
             loading={featuredLoading}
+            onNestedHorizontalFocus={onNestedHorizontalFocus}
           />
         ) : null}
 
         <View style={styles.sectionHead}>
           <View style={styles.sectionTitleRow}>
             <View style={styles.sectionBar} />
-            <Text style={styles.recommendedHeading}>{feedTitle}</Text>
+            <Text style={styles.recommendedHeading}>
+              {!selectedCategoryId
+                ? "All Products"
+                : selectedSubcategoryId
+                  ? "Products"
+                  : "Category Products"}
+            </Text>
             <View style={styles.sectionSpacer} />
             <GridColumnSwitcher
               value={gridColumns}
               onChange={setGridColumns}
             />
           </View>
-          {advertisedProducts.length > 0 ? (
+          {productsFeed.filtering ? (
+            <View style={styles.filterBusyRow}>
+              <ActivityIndicator size="small" color="#f5832b" />
+              <Text style={styles.sectionHint}>Updating products…</Text>
+            </View>
+          ) : advertisedProducts.length > 0 ? (
             <Text style={styles.sectionHint}>
               Promoted products shown first · refreshed randomly
             </Text>
           ) : null}
         </View>
       </View>
-    );
-  }, [
-    isManufacturers,
-    isWholesale,
-    sellers,
-    sellersLoading,
-    selectedSellerId,
-    feedTitle,
-    gridColumns,
-    setGridColumns,
-    selectedCategoryId,
-    selectedSubcategoryId,
-    categoriesExpanded,
-    toggleCategoriesExpanded,
-    setHomeMode,
-    featuredStores,
-    featuredLoading,
-    advertisedProducts.length,
-  ]);
+    ),
+    [
+      isWholesale,
+      selectedCategoryId,
+      selectedSubcategoryId,
+      categoriesExpanded,
+      toggleCategoriesExpanded,
+      handleModeChange,
+      featuredStores,
+      featuredLoading,
+      gridColumns,
+      setGridColumns,
+      advertisedProducts.length,
+      onNestedHorizontalFocus,
+      productsFeed.filtering,
+    ]
+  );
 
-  const listFooter = () => {
-    if (!loadingMore) return null;
+  const manufacturersHeader = useMemo(
+    () => (
+      <View>
+        {isWholesale ? (
+          <WholesalePromoBanner href="/featuredRequest" />
+        ) : null}
+
+        <SellerFilterBar
+          sellers={sellers}
+          loading={sellersLoading}
+          selectedSellerId={selectedSellerId}
+          onSelectSeller={setSelectedSellerId}
+          onNestedHorizontalFocus={onNestedHorizontalFocus}
+        />
+
+        <View style={styles.sectionHead}>
+          <View style={styles.sectionTitleRow}>
+            <Text style={styles.recommendedHeading}>
+              {selectedSellerName
+                ? `${selectedSellerName}'s products`
+                : "Products from sellers"}
+            </Text>
+            <View style={styles.sectionSpacer} />
+            <GridColumnSwitcher
+              value={gridColumns}
+              onChange={setGridColumns}
+            />
+          </View>
+          {!selectedSellerId ? (
+            manufacturersFeed.filtering ? (
+              <View style={styles.filterBusyRow}>
+                <ActivityIndicator size="small" color="#f5832b" />
+                <Text style={styles.sectionHint}>Updating products…</Text>
+              </View>
+            ) : (
+              <Text style={styles.sectionHint}>
+                Showing all seller products · tap a store to filter
+              </Text>
+            )
+          ) : manufacturersFeed.filtering ? (
+            <View style={styles.filterBusyRow}>
+              <ActivityIndicator size="small" color="#f5832b" />
+              <Text style={styles.sectionHint}>Updating products…</Text>
+            </View>
+          ) : null}
+        </View>
+      </View>
+    ),
+    [
+      isWholesale,
+      sellers,
+      sellersLoading,
+      selectedSellerId,
+      selectedSellerName,
+      gridColumns,
+      setGridColumns,
+      onNestedHorizontalFocus,
+      manufacturersFeed.filtering,
+    ]
+  );
+
+  const productsFooter = useCallback(() => {
+    if (!productsFeed.loadingMore) return null;
     return (
       <View style={styles.footerLoader}>
         <ActivityIndicator size="small" color="#f5832b" />
       </View>
     );
-  };
+  }, [productsFeed.loadingMore]);
 
-  const showInitialLoader =
-    (adsLoading || initializing) && listData.length === 0;
-
-  if (showInitialLoader) {
+  const manufacturersFooter = useCallback(() => {
+    if (!manufacturersFeed.loadingMore) return null;
     return (
-      <View style={styles.screen}>
-        <TopBar activeMode={homeMode} onModeChange={setHomeMode} />
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#f5832b" />
-        </View>
+      <View style={styles.footerLoader}>
+        <ActivityIndicator size="small" color="#f5832b" />
       </View>
     );
-  }
+  }, [manufacturersFeed.loadingMore]);
+
+  const showProductsLoader =
+    (adsLoading || productsFeed.initializing) &&
+    productsListData.length === 0 &&
+    !productsFeed.filtering;
+
+  const showManufacturersLoader =
+    manufacturersVisited &&
+    manufacturersFeed.initializing &&
+    manufacturersListData.length === 0 &&
+    !manufacturersFeed.filtering;
 
   return (
     <View style={styles.screen}>
-      <TopBar activeMode={homeMode} onModeChange={setHomeMode} />
-      <View style={styles.mainContainer}>
-        <FlatList
-          key={`grid-${homeMode}-${gridColumns}-${selectedSellerId ?? "all"}`}
-          data={listData}
-          renderItem={renderItem}
-          keyExtractor={(item) =>
-            item.isSponsored ? `ad-${item.id}` : item.id.toString()
-          }
-          ListHeaderComponent={flatHeaderSection}
-          ListFooterComponent={listFooter}
-          ListEmptyComponent={
-            <View style={styles.emptyWrap}>
-              <Text style={styles.emptyTitle}>
-                {selectedSellerId
-                  ? "No products from this seller"
-                  : "No products found"}
-              </Text>
-              <Text style={styles.emptyBody}>
-                {selectedSellerId
-                  ? "Try another seller or open their profile."
-                  : "Try another category or pull to refresh."}
-              </Text>
+      <TopBar
+        activeMode={homeMode}
+        onModeChange={handleModeChange}
+        scrollX={scrollX}
+        pageWidth={pageWidth}
+      />
+
+      <Animated.ScrollView
+        ref={pagerRef}
+        horizontal
+        pagingEnabled
+        scrollEnabled={pagerScrollEnabled}
+        bounces={false}
+        decelerationRate="fast"
+        showsHorizontalScrollIndicator={false}
+        nestedScrollEnabled
+        keyboardShouldPersistTaps="handled"
+        onScroll={handlePagerScroll}
+        onMomentumScrollEnd={handlePagerScrollEnd}
+        scrollEventThrottle={16}
+        style={styles.pager}
+      >
+        <View style={[styles.page, { width: pageWidth }]}>
+          {showProductsLoader ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color="#f5832b" />
             </View>
-          }
-          contentContainerStyle={styles.listContent}
-          showsVerticalScrollIndicator={false}
-          numColumns={gridColumns}
-          columnWrapperStyle={[styles.productWrap, { gap: columnGap }]}
-          onEndReached={handleEndReached}
-          onEndReachedThreshold={0.5}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={handleRefresh}
-              tintColor="#f5832b"
-              colors={["#f5832b"]}
+          ) : (
+            <FlatList
+              key={`products-grid-${gridColumns}`}
+              data={productsListData}
+              renderItem={renderItem}
+              keyExtractor={(item) =>
+                item.isSponsored ? `ad-${item.id}` : item.id.toString()
+              }
+              ListHeaderComponent={productsHeader}
+              ListFooterComponent={productsFooter}
+              ListEmptyComponent={
+                <View style={styles.emptyWrap}>
+                  <Text style={styles.emptyTitle}>No products found</Text>
+                  <Text style={styles.emptyBody}>
+                    Try another category or pull to refresh.
+                  </Text>
+                </View>
+              }
+              contentContainerStyle={styles.listContent}
+              showsVerticalScrollIndicator={false}
+              numColumns={gridColumns}
+              columnWrapperStyle={
+                productsListData.length === 0
+                  ? undefined
+                  : [styles.productWrap, { gap: columnGap }]
+              }
+              onEndReached={productsFeed.handleEndReached}
+              onEndReachedThreshold={0.5}
+              refreshControl={
+                <RefreshControl
+                  refreshing={productsFeed.refreshing}
+                  onRefresh={handleProductsRefresh}
+                  tintColor="#f5832b"
+                  colors={["#f5832b"]}
+                />
+              }
             />
-          }
-        />
-      </View>
+          )}
+        </View>
+
+        <View style={[styles.page, { width: pageWidth }]}>
+          {!manufacturersVisited ? (
+            <View style={styles.loadingContainer} />
+          ) : showManufacturersLoader ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color="#f5832b" />
+            </View>
+          ) : (
+            <FlatList
+              key={`mfg-grid-${gridColumns}`}
+              data={manufacturersListData}
+              renderItem={renderItem}
+              keyExtractor={(item) => item.id.toString()}
+              ListHeaderComponent={manufacturersHeader}
+              ListFooterComponent={manufacturersFooter}
+              ListEmptyComponent={
+                <View style={styles.emptyWrap}>
+                  <Text style={styles.emptyTitle}>
+                    {selectedSellerId
+                      ? "No products from this seller"
+                      : "No products found"}
+                  </Text>
+                  <Text style={styles.emptyBody}>
+                    {selectedSellerId
+                      ? "Try another seller or open their profile."
+                      : "Try another filter or pull to refresh."}
+                  </Text>
+                </View>
+              }
+              contentContainerStyle={styles.listContent}
+              showsVerticalScrollIndicator={false}
+              numColumns={gridColumns}
+              columnWrapperStyle={
+                manufacturersListData.length === 0
+                  ? undefined
+                  : [styles.productWrap, { gap: columnGap }]
+              }
+              onEndReached={manufacturersFeed.handleEndReached}
+              onEndReachedThreshold={0.5}
+              refreshControl={
+                <RefreshControl
+                  refreshing={manufacturersFeed.refreshing}
+                  onRefresh={handleManufacturersRefresh}
+                  tintColor="#f5832b"
+                  colors={["#f5832b"]}
+                />
+              }
+            />
+          )}
+        </View>
+      </Animated.ScrollView>
     </View>
   );
 }
@@ -353,7 +557,10 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#F3F4F6",
   },
-  mainContainer: {
+  pager: {
+    flex: 1,
+  },
+  page: {
     flex: 1,
     paddingHorizontal: 12,
     paddingTop: 12,
@@ -396,6 +603,12 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#9CA3AF",
     fontWeight: "500",
+  },
+  filterBusyRow: {
+    marginTop: 6,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
   },
   productWrap: {
     flexDirection: "row",

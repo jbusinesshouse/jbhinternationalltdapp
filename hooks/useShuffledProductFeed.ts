@@ -12,6 +12,10 @@ type UseShuffledProductFeedOptions = {
   enabled?: boolean;
 };
 
+/**
+ * Shuffled product feed with soft filter updates:
+ * keeps the previous grid visible while a category/seller change loads.
+ */
 export function useShuffledProductFeed({
   categoryId,
   subcategoryId,
@@ -26,12 +30,14 @@ export function useShuffledProductFeed({
   const [currentIndex, setCurrentIndex] = useState(0);
 
   const [initializing, setInitializing] = useState(true);
+  const [filtering, setFiltering] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
 
   const shuffledIdsRef = useRef<string[]>([]);
   const currentIndexRef = useRef(0);
   const isFetchingBatchRef = useRef(false);
+  const hasLoadedOnceRef = useRef(false);
   const excludeIdsKey = excludeProductIds.slice().sort().join("|");
   const excludeIdsRef = useRef<Set<string>>(new Set(excludeProductIds));
 
@@ -70,67 +76,108 @@ export function useShuffledProductFeed({
     }
   }, []);
 
-  const initializeFeed = useCallback(async () => {
-    try {
-      const { ids: rawIds } = await fetchFeedIds({
-        categoryId,
-        subcategoryId,
-        sellerId,
-        excludeProductIds: [...excludeIdsRef.current],
-      });
+  const initializeFeed = useCallback(
+    async (mode: "hard" | "soft" | "refresh" = "hard") => {
+      try {
+        const { ids: rawIds } = await fetchFeedIds({
+          categoryId,
+          subcategoryId,
+          sellerId,
+          excludeProductIds: [...excludeIdsRef.current],
+        });
 
-      const ids = (rawIds ?? []).filter(
-        (id: string) => !excludeIdsRef.current.has(id)
-      );
+        const ids = (rawIds ?? []).filter(
+          (id: string) => !excludeIdsRef.current.has(id)
+        );
 
-      shuffledIdsRef.current = ids;
-      currentIndexRef.current = 0;
-
-      setShuffledIds(ids);
-      setVisibleProducts([]);
-      setCurrentIndex(0);
-
-      if (ids.length > 0) {
+        shuffledIdsRef.current = ids;
+        currentIndexRef.current = 0;
         isFetchingBatchRef.current = false;
-        await fetchNextBatch();
+
+        setShuffledIds(ids);
+        setCurrentIndex(0);
+
+        // Soft filter: keep old cards until the first new batch arrives.
+        if (mode === "hard" || mode === "refresh" || ids.length === 0) {
+          setVisibleProducts([]);
+        }
+
+        if (ids.length === 0) {
+          setVisibleProducts([]);
+          return;
+        }
+
+        isFetchingBatchRef.current = true;
+        setLoadingMore(true);
+        try {
+          const batchIds = ids.slice(0, BATCH_SIZE);
+          const { products } = await fetchFeedBatch(batchIds);
+          const formatted = (products ?? []) as ProductFeedItem[];
+          currentIndexRef.current = BATCH_SIZE;
+          setCurrentIndex(BATCH_SIZE);
+          setVisibleProducts(formatted);
+        } finally {
+          isFetchingBatchRef.current = false;
+          setLoadingMore(false);
+        }
+      } catch (error) {
+        if (__DEV__) {
+          console.log("Error initializing product feed:", error);
+        }
+        if (mode === "hard") {
+          setVisibleProducts([]);
+        }
       }
-    } catch (error) {
-      if (__DEV__) {
-        console.log("Error initializing product feed:", error);
-      }
-    }
-  }, [categoryId, subcategoryId, sellerId, excludeIdsKey, fetchNextBatch]);
+    },
+    [categoryId, subcategoryId, sellerId, excludeIdsKey]
+  );
 
   useEffect(() => {
     if (!enabled || authLoading) return;
 
+    let cancelled = false;
+
     const boot = async () => {
-      setInitializing(true);
-      await initializeFeed();
+      const soft = hasLoadedOnceRef.current;
+      if (soft) {
+        setFiltering(true);
+      } else {
+        setInitializing(true);
+      }
+
+      await initializeFeed(soft ? "soft" : "hard");
+
+      if (cancelled) return;
+      hasLoadedOnceRef.current = true;
       setInitializing(false);
+      setFiltering(false);
     };
 
     boot();
+    return () => {
+      cancelled = true;
+    };
   }, [enabled, authLoading, initializeFeed]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     isFetchingBatchRef.current = false;
-    await initializeFeed();
+    await initializeFeed("refresh");
     setRefreshing(false);
   }, [initializeFeed]);
 
   const handleEndReached = useCallback(() => {
-    if (initializing || refreshing || loadingMore) return;
+    if (initializing || filtering || refreshing || loadingMore) return;
     if (currentIndexRef.current >= shuffledIdsRef.current.length) return;
     fetchNextBatch();
-  }, [initializing, refreshing, loadingMore, fetchNextBatch]);
+  }, [initializing, filtering, refreshing, loadingMore, fetchNextBatch]);
 
   return {
     shuffledIds,
     visibleProducts,
     currentIndex,
     initializing,
+    filtering,
     refreshing,
     loadingMore,
     onRefresh,

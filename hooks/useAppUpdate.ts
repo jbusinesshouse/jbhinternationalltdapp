@@ -1,51 +1,66 @@
+import Constants from 'expo-constants'
 import { useEffect } from 'react'
-import { InteractionManager, Platform } from 'react-native'
+import { Platform } from 'react-native'
 
 const UPDATE_CHECK_TIMEOUT_MS = 8000
-const UPDATE_CHECK_DELAY_MS = 2000
+const UPDATE_CHECK_DELAY_MS = 2500
+
+/**
+ * In-app updates require a custom native build.
+ * Never load `expo-in-app-updates` in Expo Go — requiring the native
+ * module throws a fatal error that can freeze the app on splash.
+ */
+function canUseInAppUpdates() {
+  if (Platform.OS !== 'android') return false
+  if (__DEV__) return false
+
+  const env = String(Constants.executionEnvironment ?? '')
+  const ownership = String(Constants.appOwnership ?? '')
+  if (env === 'storeClient' || ownership === 'expo') return false
+
+  return true
+}
 
 export default function useAppUpdate() {
-    useEffect(() => {
-        let cancelled = false
-        let timer: ReturnType<typeof setTimeout> | undefined
+  useEffect(() => {
+    if (!canUseInAppUpdates()) return
 
-        const interaction = InteractionManager.runAfterInteractions(() => {
-            timer = setTimeout(async () => {
-                if (cancelled) return
+    let cancelled = false
+    const timer = setTimeout(async () => {
+      if (cancelled) return
 
-                if (Platform.OS !== 'android') return
+      try {
+        const InAppUpdates = await import('expo-in-app-updates')
 
-                try {
-                    const InAppUpdates = await import('expo-in-app-updates')
+        const result = await Promise.race([
+          InAppUpdates.checkForUpdate(),
+          new Promise<never>((_, reject) =>
+            setTimeout(
+              () => reject(new Error('Update check timed out')),
+              UPDATE_CHECK_TIMEOUT_MS
+            )
+          ),
+        ])
 
-                    const result = await Promise.race([
-                        InAppUpdates.checkForUpdate(),
-                        new Promise<never>((_, reject) =>
-                            setTimeout(() => reject(new Error('Update check timed out')), UPDATE_CHECK_TIMEOUT_MS)
-                        ),
-                    ])
+        if (cancelled) return
 
-                    if (cancelled) return
-
-                    if (result.updateAvailable) {
-                        if (result.immediateAllowed) {
-                            await InAppUpdates.startUpdate(true)
-                        } else if (result.flexibleAllowed) {
-                            await InAppUpdates.startUpdate(false)
-                        }
-                    }
-                } catch (e) {
-                    if (__DEV__) {
-                        console.log('Update check failed:', e)
-                    }
-                }
-            }, UPDATE_CHECK_DELAY_MS)
-        })
-
-        return () => {
-            cancelled = true
-            if (timer) clearTimeout(timer)
-            interaction.cancel()
+        if (result.updateAvailable) {
+          if (result.immediateAllowed) {
+            await InAppUpdates.startUpdate(true)
+          } else if (result.flexibleAllowed) {
+            await InAppUpdates.startUpdate(false)
+          }
         }
-    }, [])
+      } catch (e) {
+        if (__DEV__) {
+          console.log('Update check failed:', e)
+        }
+      }
+    }, UPDATE_CHECK_DELAY_MS)
+
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
+  }, [])
 }

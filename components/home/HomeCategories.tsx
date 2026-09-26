@@ -3,18 +3,20 @@ import {
   fetchSubcategories,
 } from "@/lib/catalogApi";
 import Feather from "@expo/vector-icons/Feather";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   LayoutAnimation,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
   Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   UIManager,
   View,
 } from "react-native";
+import { ScrollView } from "react-native-gesture-handler";
 
 const PRIMARY = "#f5832b";
 const ACCENTS = [
@@ -51,6 +53,8 @@ type HomeCategoriesProps = {
   onSelectSubcategory: (subcategoryId: string | null) => void;
   expanded?: boolean;
   onToggleExpanded?: () => void;
+  /** Lock the parent Products↔Manufacturers pager while this strip is touched */
+  onNestedHorizontalFocus?: (focused: boolean) => void;
 };
 
 function getAccent(index: number) {
@@ -71,10 +75,46 @@ export default function HomeCategories({
   onSelectSubcategory,
   expanded = false,
   onToggleExpanded,
+  onNestedHorizontalFocus,
 }: HomeCategoriesProps) {
   const [categories, setCategories] = useState<HomeCategory[]>([]);
   const [subcategories, setSubcategories] = useState<HomeSubcategory[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const catScrollRef = useRef<ScrollView>(null);
+  const subScrollRef = useRef<ScrollView>(null);
+  const catScrollXRef = useRef(0);
+  const subScrollXRef = useRef(0);
+
+  const rememberCatScroll = (
+    e: NativeSyntheticEvent<NativeScrollEvent>
+  ) => {
+    catScrollXRef.current = e.nativeEvent.contentOffset.x;
+  };
+
+  const rememberSubScroll = (
+    e: NativeSyntheticEvent<NativeScrollEvent>
+  ) => {
+    subScrollXRef.current = e.nativeEvent.contentOffset.x;
+  };
+
+  const restoreCatScroll = () => {
+    const x = catScrollXRef.current;
+    if (x > 0) {
+      requestAnimationFrame(() => {
+        catScrollRef.current?.scrollTo({ x, y: 0, animated: false });
+      });
+    }
+  };
+
+  const restoreSubScroll = () => {
+    const x = subScrollXRef.current;
+    if (x > 0) {
+      requestAnimationFrame(() => {
+        subScrollRef.current?.scrollTo({ x, y: 0, animated: false });
+      });
+    }
+  };
 
   const load = useCallback(async () => {
     try {
@@ -164,6 +204,12 @@ export default function HomeCategories({
     </Pressable>
   );
 
+  const bindNestedHorizontal = {
+    onTouchStart: () => onNestedHorizontalFocus?.(true),
+    onTouchEnd: () => onNestedHorizontalFocus?.(false),
+    onTouchCancel: () => onNestedHorizontalFocus?.(false),
+  };
+
   if (loading) {
     return (
       <View style={styles.container}>
@@ -244,9 +290,16 @@ export default function HomeCategories({
             <View style={styles.catWrap}>{chips}</View>
           ) : (
             <ScrollView
+              ref={catScrollRef}
               horizontal
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.catScroll}
+              nestedScrollEnabled
+              directionalLockEnabled
+              scrollEventThrottle={16}
+              onScroll={rememberCatScroll}
+              onContentSizeChange={restoreCatScroll}
+              {...bindNestedHorizontal}
             >
               {chips}
             </ScrollView>
@@ -279,9 +332,16 @@ export default function HomeCategories({
               : "Subcategories"}
           </Text>
           <ScrollView
+            ref={subScrollRef}
             horizontal
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.subScroll}
+            nestedScrollEnabled
+            directionalLockEnabled
+            scrollEventThrottle={16}
+            onScroll={rememberSubScroll}
+            onContentSizeChange={restoreSubScroll}
+            {...bindNestedHorizontal}
           >
             <Pressable
               onPress={() => onSelectSubcategory(null)}

@@ -20,7 +20,7 @@ type UseAdvertisedProductsResult = {
 
 /**
  * Loads a shuffled slice of active sponsored products for home / category feeds.
- * Block filtering is applied on the server when authenticated.
+ * Filter changes keep prior ads visible until the next response (no blank flash).
  */
 export function useAdvertisedProducts({
   categoryId,
@@ -32,6 +32,7 @@ export function useAdvertisedProducts({
   const [loading, setLoading] = useState(true);
   const isMountedRef = useRef(true);
   const isFetchingRef = useRef(false);
+  const hasLoadedOnceRef = useRef(false);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -41,14 +42,13 @@ export function useAdvertisedProducts({
   }, []);
 
   const load = useCallback(
-    async (isInitial: boolean) => {
+    async (mode: "initial" | "filter" | "refresh") => {
       if (!enabled || authLoading) return;
       if (isFetchingRef.current) return;
       isFetchingRef.current = true;
 
-      if (isInitial && isMountedRef.current) {
+      if (mode === "initial" && isMountedRef.current) {
         setLoading(true);
-        setProducts([]);
       }
 
       try {
@@ -59,10 +59,11 @@ export function useAdvertisedProducts({
 
         if (isMountedRef.current) {
           setProducts(next);
+          hasLoadedOnceRef.current = true;
         }
       } catch (error) {
         console.warn("[AdvertisedProducts] fetch failed:", error);
-        if (isMountedRef.current) {
+        if (isMountedRef.current && mode === "initial") {
           setProducts([]);
         }
       } finally {
@@ -76,11 +77,11 @@ export function useAdvertisedProducts({
   );
 
   useEffect(() => {
-    load(true);
+    load(hasLoadedOnceRef.current ? "filter" : "initial");
   }, [load]);
 
   const refetch = useCallback(async () => {
-    await load(false);
+    await load("refresh");
   }, [load]);
 
   return {

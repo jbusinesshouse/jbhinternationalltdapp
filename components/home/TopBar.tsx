@@ -6,6 +6,7 @@ import { router } from "expo-router";
 import React, { useCallback, useEffect, useState } from "react";
 import {
   Image,
+  LayoutChangeEvent,
   Pressable,
   StyleSheet,
   Text,
@@ -13,8 +14,16 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import Animated, {
+  SharedValue,
+  interpolate,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from "react-native-reanimated";
 
 const PRIMARY = "#f5832b";
+const TAB_GAP = 16;
 
 const TABS: { key: HomeMode; label: string }[] = [
   { key: "products", label: "Products" },
@@ -24,19 +33,97 @@ const TABS: { key: HomeMode; label: string }[] = [
 type TopBarProps = {
   activeMode?: HomeMode;
   onModeChange?: (mode: HomeMode) => void;
+  /** Pager contentOffset.x — drives the sliding underline while swiping */
+  scrollX?: SharedValue<number>;
+  pageWidth?: number;
 };
+
+function ModeTab({
+  label,
+  active,
+  onPress,
+  onLayout,
+}: {
+  label: string;
+  active: boolean;
+  onPress: () => void;
+  onLayout: (e: LayoutChangeEvent) => void;
+}) {
+  const focus = useSharedValue(active ? 1 : 0);
+
+  useEffect(() => {
+    focus.value = withTiming(active ? 1 : 0, { duration: 220 });
+  }, [active, focus]);
+
+  const inactiveStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(focus.value, [0, 1], [1, 0]),
+  }));
+
+  const activeStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(focus.value, [0, 1], [0, 1]),
+  }));
+
+  return (
+    <Pressable
+      onPress={onPress}
+      onLayout={onLayout}
+      style={styles.tabBtn}
+      hitSlop={4}
+    >
+      <View style={styles.tabLabelWrap}>
+        <Text style={[styles.tabTextActive, styles.tabTextSizer]}>{label}</Text>
+        <Animated.Text
+          style={[styles.tabTextActive, styles.tabTextFill, activeStyle]}
+        >
+          {label}
+        </Animated.Text>
+        <Animated.Text
+          style={[styles.tabText, styles.tabTextFill, inactiveStyle]}
+        >
+          {label}
+        </Animated.Text>
+      </View>
+    </Pressable>
+  );
+}
 
 /**
  * JBH home header: Products / Manufacturers mode tabs + search.
- * Keeps black brand chrome from the existing app.
+ * Underline tracks pager scroll; label active state eases in after settle.
  */
 const TopBar = ({
   activeMode = "products",
   onModeChange,
+  scrollX,
+  pageWidth = 1,
 }: TopBarProps) => {
   const { user, loading: authLoading } = useUser();
   const [searchVal, setSearchVal] = useState("");
   const [unreadCount, setUnreadCount] = useState(0);
+
+  const tab0X = useSharedValue(0);
+  const tab0W = useSharedValue(72);
+  const tab1X = useSharedValue(88);
+  const tab1W = useSharedValue(110);
+
+  const fallbackScrollX = useSharedValue(
+    activeMode === "manufacturers" ? Math.max(pageWidth, 1) : 0
+  );
+  const effectiveScrollX = scrollX ?? fallbackScrollX;
+  const pageWidthSV = useSharedValue(Math.max(pageWidth, 1));
+
+  useEffect(() => {
+    pageWidthSV.value = Math.max(pageWidth, 1);
+  }, [pageWidth, pageWidthSV]);
+
+  // Keep fallback in sync when parent doesn't drive scrollX (tab-only updates)
+  useEffect(() => {
+    if (scrollX) return;
+    fallbackScrollX.value = withTiming(
+      activeMode === "manufacturers" ? pageWidthSV.value : 0,
+      { duration: 220 }
+    );
+  }, [activeMode, scrollX, fallbackScrollX, pageWidthSV]);
 
   const handleSearch = () => {
     if (!searchVal?.trim()) return;
@@ -65,26 +152,48 @@ const TopBar = ({
     return () => clearInterval(interval);
   }, [authLoading, fetchUnreadNotifications]);
 
+  const onTabLayout = (index: number, e: LayoutChangeEvent) => {
+    const { x, width } = e.nativeEvent.layout;
+    if (width <= 0) return;
+    if (index === 0) {
+      tab0X.value = x;
+      tab0W.value = width;
+    } else {
+      tab1X.value = x;
+      tab1W.value = width;
+    }
+  };
+
+  const underlineStyle = useAnimatedStyle(() => {
+    const width = Math.max(pageWidthSV.value, 1);
+    const p = Math.min(1, Math.max(0, effectiveScrollX.value / width));
+    const left = tab0X.value + (tab1X.value - tab0X.value) * p;
+    const barWidth = tab0W.value + (tab1W.value - tab0W.value) * p;
+
+    return {
+      opacity: 1,
+      width: barWidth,
+      left,
+    };
+  });
+
   return (
     <View style={styles.container}>
       <View style={styles.topRow}>
         <View style={styles.tabs}>
-          {TABS.map((tab) => {
-            const active = activeMode === tab.key;
-            return (
-              <Pressable
-                key={tab.key}
-                onPress={() => onModeChange?.(tab.key)}
-                style={styles.tabBtn}
-                hitSlop={4}
-              >
-                <Text style={[styles.tabText, active && styles.tabTextActive]}>
-                  {tab.label}
-                </Text>
-                {active ? <View style={styles.tabUnderline} /> : null}
-              </Pressable>
-            );
-          })}
+          {TABS.map((tab, index) => (
+            <ModeTab
+              key={tab.key}
+              label={tab.label}
+              active={activeMode === tab.key}
+              onPress={() => onModeChange?.(tab.key)}
+              onLayout={(e) => onTabLayout(index, e)}
+            />
+          ))}
+          <Animated.View
+            pointerEvents="none"
+            style={[styles.tabUnderline, underlineStyle]}
+          />
         </View>
 
         <TouchableOpacity
@@ -152,11 +261,14 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: "row",
     alignItems: "flex-end",
-    gap: 16,
+    gap: TAB_GAP,
+    position: "relative",
   },
   tabBtn: {
     paddingBottom: 8,
-    position: "relative",
+  },
+  tabLabelWrap: {
+    justifyContent: "flex-end",
   },
   tabText: {
     fontSize: 14,
@@ -168,10 +280,17 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: "#ffffff",
   },
-  tabUnderline: {
+  tabTextSizer: {
+    opacity: 0,
+  },
+  /** Animated layers sit on top of the invisible sizer */
+  tabTextFill: {
     position: "absolute",
     left: 0,
-    right: 0,
+    bottom: 0,
+  },
+  tabUnderline: {
+    position: "absolute",
     bottom: 0,
     height: 3,
     borderRadius: 2,

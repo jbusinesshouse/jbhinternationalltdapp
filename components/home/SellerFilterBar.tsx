@@ -1,15 +1,18 @@
 import type { SellerListItem } from "@/lib/catalogApi";
 import { router } from "expo-router";
 import Feather from "@expo/vector-icons/Feather";
+import { useRef } from "react";
 import {
   ActivityIndicator,
   Image,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   View,
 } from "react-native";
+import { ScrollView } from "react-native-gesture-handler";
 
 const PRIMARY = "#f5832b";
 
@@ -18,6 +21,7 @@ type SellerFilterBarProps = {
   loading: boolean;
   selectedSellerId: string | null;
   onSelectSeller: (sellerId: string | null) => void;
+  onNestedHorizontalFocus?: (focused: boolean) => void;
 };
 
 /**
@@ -29,7 +33,24 @@ export default function SellerFilterBar({
   loading,
   selectedSellerId,
   onSelectSeller,
+  onNestedHorizontalFocus,
 }: SellerFilterBarProps) {
+  const scrollRef = useRef<ScrollView>(null);
+  const scrollXRef = useRef(0);
+
+  const rememberScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    scrollXRef.current = e.nativeEvent.contentOffset.x;
+  };
+
+  const restoreScroll = () => {
+    const x = scrollXRef.current;
+    if (x > 0) {
+      requestAnimationFrame(() => {
+        scrollRef.current?.scrollTo({ x, y: 0, animated: false });
+      });
+    }
+  };
+
   if (loading) {
     return (
       <View style={styles.container}>
@@ -58,9 +79,18 @@ export default function SellerFilterBar({
       </View>
 
       <ScrollView
+        ref={scrollRef}
         horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.scroll}
+        nestedScrollEnabled
+        directionalLockEnabled
+        scrollEventThrottle={16}
+        onScroll={rememberScroll}
+        onContentSizeChange={restoreScroll}
+        onTouchStart={() => onNestedHorizontalFocus?.(true)}
+        onTouchEnd={() => onNestedHorizontalFocus?.(false)}
+        onTouchCancel={() => onNestedHorizontalFocus?.(false)}
       >
         <Pressable
           onPress={() => onSelectSeller(null)}

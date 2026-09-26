@@ -8,16 +8,14 @@ import usePlatformFeeDueAlert from '@/hooks/usePlatformFeeDueAlert'
 import { usePushNotifications } from '@/hooks/usePushNotifications'
 import { Stack } from "expo-router"
 import * as SplashScreen from 'expo-splash-screen'
-import { useCallback, useEffect } from 'react'
+import { useEffect } from 'react'
 import { KeyboardAvoidingView, StyleSheet, Text, View } from "react-native"
-
-SplashScreen.preventAutoHideAsync().catch(() => {})
+import { GestureHandlerRootView } from 'react-native-gesture-handler'
 
 /**
  * Banner component to show account status warnings
  */
 const AccountStatusBanner = ({ status }: { status: string }) => {
-  // Map styles based on the enum values
   const config = {
     freeze: { color: '#ef4444', text: 'আপনার অ্যাকাউন্ট স্থগিত আছে। সাপোর্টে যোগাযোগ করুন।' },
     restricted: { color: '#f59e0b', text: 'আপনার অ্যাকাউন্ট সীমিত করা হয়েছে। কিছু সুবিধা ব্যবহার করা যাবে না।' }
@@ -38,23 +36,24 @@ function RootLayoutNav() {
   usePlatformFeeDueAlert();
   usePushNotifications();
 
-  const onLayoutRootView = useCallback(() => {
+  // Hide splash as soon as this tree mounts — do NOT call preventAutoHideAsync
+  // (that can leave Expo Go stuck on the splash forever if JS stalls).
+  useEffect(() => {
     SplashScreen.hideAsync().catch(() => {});
   }, []);
 
   useEffect(() => {
-    const fallback = setTimeout(() => SplashScreen.hideAsync().catch(() => {}), 500);
-    return () => clearTimeout(fallback);
-  }, []);
+    if (!loading) {
+      SplashScreen.hideAsync().catch(() => {});
+    }
+  }, [loading]);
 
-  // Don't mount navigation until auth is ready — prevents first-launch router crashes
   if (loading) {
-    return <View style={styles.boot} onLayout={onLayoutRootView} />;
+    return <View style={styles.boot} />;
   }
 
   return (
-    <View style={{ flex: 1 }} onLayout={onLayoutRootView}>
-      {/* ✅ Banner shows above the stack if status is not 'active' */}
+    <View style={{ flex: 1 }}>
       {profile?.status && profile.status !== 'active' && (
         <AccountStatusBanner status={profile.status} />
       )}
@@ -74,19 +73,21 @@ export default function RootLayout() {
   const behaviour = useKeyboardBehavior()
 
   return (
-    <UserProvider>
-      <ChatInboxProvider>
-        <AppAlertProvider>
-          <KeyboardAvoidingView
-            style={{ flex: 1 }}
-            behavior={behaviour}
-            keyboardVerticalOffset={0}
-          >
-            <RootLayoutNav />
-          </KeyboardAvoidingView>
-        </AppAlertProvider>
-      </ChatInboxProvider>
-    </UserProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <UserProvider>
+        <ChatInboxProvider>
+          <AppAlertProvider>
+            <KeyboardAvoidingView
+              style={{ flex: 1 }}
+              behavior={behaviour}
+              keyboardVerticalOffset={0}
+            >
+              <RootLayoutNav />
+            </KeyboardAvoidingView>
+          </AppAlertProvider>
+        </ChatInboxProvider>
+      </UserProvider>
+    </GestureHandlerRootView>
   )
 }
 
@@ -96,7 +97,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
   },
   banner: {
-    // Note: If you don't use a SafeAreaView, you need padding for the status bar
     paddingTop: 50,
     paddingBottom: 12,
     paddingHorizontal: 20,
