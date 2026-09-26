@@ -71,13 +71,20 @@ function ModeTab({
       hitSlop={4}
     >
       <View style={styles.tabLabelWrap}>
-        <Text style={[styles.tabTextActive, styles.tabTextSizer]}>{label}</Text>
+        <Text
+          numberOfLines={1}
+          style={[styles.tabTextActive, styles.tabTextSizer]}
+        >
+          {label}
+        </Text>
         <Animated.Text
+          numberOfLines={1}
           style={[styles.tabTextActive, styles.tabTextFill, activeStyle]}
         >
           {label}
         </Animated.Text>
         <Animated.Text
+          numberOfLines={1}
           style={[styles.tabText, styles.tabTextFill, inactiveStyle]}
         >
           {label}
@@ -258,25 +265,28 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   tabs: {
-    flex: 1,
+    flexShrink: 1,
     flexDirection: "row",
     alignItems: "flex-end",
     gap: TAB_GAP,
     position: "relative",
+    marginRight: 8,
   },
   tabBtn: {
     paddingBottom: 8,
+    flexShrink: 0,
   },
   tabLabelWrap: {
     justifyContent: "flex-end",
+    flexShrink: 0,
   },
   tabText: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "500",
     color: "rgba(255,255,255,0.65)",
   },
   tabTextActive: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "800",
     color: "#ffffff",
   },
@@ -287,6 +297,7 @@ const styles = StyleSheet.create({
   tabTextFill: {
     position: "absolute",
     left: 0,
+    right: 0,
     bottom: 0,
   },
   tabUnderline: {
