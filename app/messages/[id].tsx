@@ -1,6 +1,7 @@
 import { showAppAlert } from '@/context/AppAlertContext';
 import { useChatInbox } from '@/context/ChatInboxContext';
 import { useUser } from '@/context/UserContext';
+import { canChat, chatBlockMessage } from '@/lib/accountStatus';
 import {
     ChatMessage,
     ChatProductPayload,
@@ -61,7 +62,7 @@ const ProductCardBubble = ({ product, isSelf, onPress }: ProductCardProps) => (
 
 const SingleMessage = () => {
     const navigation = useNavigation();
-    const { user } = useUser();
+    const { user, profile } = useUser();
     const { messagesByRoom, setMessages, appendMessage, upsertRoomPreview } = useChatInbox();
     const insets = useSafeAreaInsets();
     const listRef = useRef<FlatList<ChatMessage>>(null);
@@ -152,6 +153,15 @@ const SingleMessage = () => {
 
     const handleSend = async () => {
         if (!roomId || !user || sending) return;
+
+        if (!canChat(profile?.status)) {
+            showAppAlert(
+                'চ্যাট বন্ধ',
+                chatBlockMessage(profile?.status) ??
+                    'আপনার অ্যাকাউন্ট স্থগিত থাকায় মেসেজ করা যাবে না।'
+            );
+            return;
+        }
 
         const trimmed = messageVal.trim();
         if (!trimmed) return;

@@ -3,11 +3,14 @@ import { useCallback, useEffect, useState } from "react";
 
 export type GridColumns = 2 | 3 | 4;
 export type HomeMode = "products" | "manufacturers";
+/** Product feed filter by seller store type. */
+export type CatalogStoreType = "all" | "retail" | "wholesale";
 
 type StoredCatalogPrefs = {
   gridColumns: GridColumns;
   /** true = category bar shows all rows wrapped */
   categoriesExpanded: boolean;
+  storeType: CatalogStoreType;
 };
 
 type CatalogPrefs = StoredCatalogPrefs & {
@@ -15,13 +18,18 @@ type CatalogPrefs = StoredCatalogPrefs & {
   homeMode: HomeMode;
 };
 
-const STORAGE_KEY = "@jbh/catalog_prefs_v5";
+const STORAGE_KEY = "@jbh/catalog_prefs_v6";
 
 const DEFAULTS: CatalogPrefs = {
   gridColumns: 4,
   categoriesExpanded: false,
+  storeType: "all",
   homeMode: "products",
 };
+
+function isCatalogStoreType(v: unknown): v is CatalogStoreType {
+  return v === "all" || v === "retail" || v === "wholesale";
+}
 
 function isGridColumns(v: unknown): v is GridColumns {
   return v === 2 || v === 3 || v === 4;
@@ -34,6 +42,7 @@ async function readStoredPrefs(): Promise<StoredCatalogPrefs> {
       return {
         gridColumns: DEFAULTS.gridColumns,
         categoriesExpanded: DEFAULTS.categoriesExpanded,
+        storeType: DEFAULTS.storeType,
       };
     }
     const parsed = JSON.parse(raw) as Record<string, unknown>;
@@ -45,11 +54,15 @@ async function readStoredPrefs(): Promise<StoredCatalogPrefs> {
         typeof parsed.categoriesExpanded === "boolean"
           ? parsed.categoriesExpanded
           : DEFAULTS.categoriesExpanded,
+      storeType: isCatalogStoreType(parsed.storeType)
+        ? parsed.storeType
+        : DEFAULTS.storeType,
     };
   } catch {
     return {
       gridColumns: DEFAULTS.gridColumns,
       categoriesExpanded: DEFAULTS.categoriesExpanded,
+      storeType: DEFAULTS.storeType,
     };
   }
 }
@@ -87,15 +100,13 @@ export function useCatalogPrefs() {
     };
   }, []);
 
-  const persistLayout = useCallback(
-    (next: CatalogPrefs) => {
-      void writeStoredPrefs({
-        gridColumns: next.gridColumns,
-        categoriesExpanded: next.categoriesExpanded,
-      });
-    },
-    []
-  );
+  const persistLayout = useCallback((next: CatalogPrefs) => {
+    void writeStoredPrefs({
+      gridColumns: next.gridColumns,
+      categoriesExpanded: next.categoriesExpanded,
+      storeType: next.storeType,
+    });
+  }, []);
 
   const setGridColumns = useCallback(
     (gridColumns: GridColumns) => {
@@ -134,14 +145,27 @@ export function useCatalogPrefs() {
     setPrefs((prev) => ({ ...prev, homeMode }));
   }, []);
 
+  const setStoreType = useCallback(
+    (storeType: CatalogStoreType) => {
+      setPrefs((prev) => {
+        const next = { ...prev, storeType };
+        persistLayout(next);
+        return next;
+      });
+    },
+    [persistLayout]
+  );
+
   return {
     ready,
     gridColumns: prefs.gridColumns,
     categoriesExpanded: prefs.categoriesExpanded,
+    storeType: prefs.storeType,
     homeMode: prefs.homeMode,
     setGridColumns,
     setCategoriesExpanded,
     toggleCategoriesExpanded,
     setHomeMode,
+    setStoreType,
   };
 }

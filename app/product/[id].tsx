@@ -2,6 +2,12 @@ import HtmlRender from "@/components/htmlRender/HtmlRenter";
 import RelatedProductsSection from "@/components/product/RelatedProductsSection";
 import { showAppAlert } from "@/context/AppAlertContext";
 import { useUser } from "@/context/UserContext";
+import {
+    buyBlockMessage,
+    canBuy,
+    canChat,
+    chatBlockMessage,
+} from "@/lib/accountStatus";
 import { fetchProductDetail } from "@/lib/catalogApi";
 import { findOrCreateChatRoom } from "@/lib/chat";
 import { promptLoginRequired } from "@/lib/guestAuth";
@@ -393,6 +399,15 @@ const ProductPreview = () => {
             return;
         }
 
+        if (!canChat(profile?.status)) {
+            showAppAlert(
+                'চ্যাট বন্ধ',
+                chatBlockMessage(profile?.status) ??
+                    'আপনার অ্যাকাউন্ট স্থগিত থাকায় মেসেজ করা যাবে না।'
+            );
+            return;
+        }
+
         setTextSellerLoading(true);
 
         const mainImage = product.product_images?.find((img) => img.is_main)?.image_url
@@ -500,11 +515,14 @@ const ProductPreview = () => {
                     />
                 </View>
 
-                {/* PRICE */}
+                {/* PRICE (VAT-inclusive from API) */}
                 <View style={styles.productInfo}>
                     <View style={styles.productPriceWrapper}>
                         <Text style={styles.productPrice}>
                             BDT {product.price}
+                        </Text>
+                        <Text style={[styles.moq, { marginTop: 2 }]}>
+                            incl. VAT
                         </Text>
                         <Text style={styles.moq}>
                             Min. order {product.moq} pieces
@@ -845,12 +863,11 @@ const ProductPreview = () => {
                     style={[
                         styles.productActOrder,
                         isOwnProduct && { width: '100%' },
-                        // Disable styling if wholesale OR if account is not active
-                        (storeType === "wholesale" || (profile?.status && profile.status !== 'active')) &&
+                        // Disable styling if wholesale OR frozen
+                        (storeType === "wholesale" || !canBuy(profile?.status)) &&
                         { backgroundColor: "#ccc" }
                     ]}
-                    // Disable interaction if wholesale OR if account is not active
-                    disabled={storeType === "wholesale" || (profile?.status && profile.status !== 'active')}
+                    disabled={storeType === "wholesale" || !canBuy(profile?.status)}
                     onPress={() => {
                         if (!user) {
                             promptLoginRequired(
@@ -860,17 +877,11 @@ const ProductPreview = () => {
                             return;
                         }
 
-                        // 0. Double check status in onPress (Safety check)
-                        if (profile?.status && profile.status !== 'active') {
-                            const statusBn =
-                                profile.status === 'freeze'
-                                    ? 'স্থগিত'
-                                    : profile.status === 'restricted'
-                                      ? 'সীমিত'
-                                      : profile.status;
+                        if (!canBuy(profile?.status)) {
                             showAppAlert(
                                 'সমস্যা',
-                                `আপনার অ্যাকাউন্ট ${statusBn} অবস্থায় আছে। এখন অর্ডার করা যাবে না।`
+                                buyBlockMessage(profile?.status) ??
+                                    'আপনার অ্যাকাউন্ট স্থগিত থাকায় অর্ডার করা যাবে না।'
                             );
                             return;
                         }
@@ -914,14 +925,11 @@ const ProductPreview = () => {
                     }}
                 >
                     <Text style={styles.productActOrderText}>
-                        {/* Dynamic Labeling */}
-                        {profile?.status === 'freeze'
+                        {!canBuy(profile?.status)
                             ? "Account Frozen"
-                            : profile?.status === 'restricted'
-                                ? "Account Restricted"
-                                : storeType === "wholesale"
-                                    ? "Only Retailers Can Order"
-                                    : "Order Now"}
+                            : storeType === "wholesale"
+                                ? "Only Retailers Can Order"
+                                : "Order Now"}
                     </Text>
                 </Pressable>
             </View>

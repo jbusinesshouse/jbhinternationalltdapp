@@ -8,6 +8,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 type UseAdvertisedProductsOptions = {
   categoryId?: string;
   subcategoryId?: string;
+  storeType?: "all" | "retail" | "wholesale";
   enabled?: boolean;
 };
 
@@ -25,6 +26,7 @@ type UseAdvertisedProductsResult = {
 export function useAdvertisedProducts({
   categoryId,
   subcategoryId,
+  storeType = "all",
   enabled = true,
 }: UseAdvertisedProductsOptions = {}): UseAdvertisedProductsResult {
   const { loading: authLoading } = useUser();
@@ -55,6 +57,7 @@ export function useAdvertisedProducts({
         const next = await fetchActiveAdvertisedProducts({
           categoryId,
           subcategoryId,
+          storeType,
         });
 
         if (isMountedRef.current) {
@@ -73,7 +76,7 @@ export function useAdvertisedProducts({
         }
       }
     },
-    [enabled, authLoading, categoryId, subcategoryId]
+    [enabled, authLoading, categoryId, subcategoryId, storeType]
   );
 
   useEffect(() => {

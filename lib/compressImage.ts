@@ -1,4 +1,6 @@
+import * as FileSystem from "expo-file-system/legacy";
 import * as ImageManipulator from "expo-image-manipulator";
+import { Platform } from "react-native";
 
 /** Default upload budget — keeps storage lean without heavy pixelation. */
 export const DEFAULT_TARGET_BYTES = 100 * 1024; // 100KB
@@ -20,12 +22,24 @@ export type CompressedImage = {
 };
 
 async function getUriByteSize(uri: string): Promise<number> {
-  const response = await fetch(uri);
-  if (!response.ok) {
-    throw new Error("Failed to read image for size check");
+  const info = await FileSystem.getInfoAsync(uri);
+  if (!info.exists || typeof info.size !== "number" || info.size <= 0) {
+    throw new Error("Failed to read compressed image");
   }
-  const buffer = await response.arrayBuffer();
-  return buffer.byteLength;
+  return info.size;
+}
+
+/**
+ * Glide (used by expo-image-manipulator on Android) often cannot decode a
+ * raw file:// URI inside the app sandbox. A content:// URI from FileProvider can.
+ */
+async function uriForManipulator(uri: string): Promise<string> {
+  if (Platform.OS !== "android" || !uri.startsWith("file://")) return uri;
+  try {
+    return await FileSystem.getContentUriAsync(uri);
+  } catch {
+    return uri;
+  }
 }
 
 function resizeActions(
@@ -59,8 +73,10 @@ export async function compressImageForUpload(
   // Quality ladder — floor ~0.4 so images stay usable on product cards
   const qualities = [0.72, 0.64, 0.56, 0.48, 0.4];
 
+  const source = await uriForManipulator(uri);
+
   // Probe current dimensions with a no-op manipulate (also normalizes HEIC/etc.)
-  let probe = await ImageManipulator.manipulateAsync(uri, [], {
+  let probe = await ImageManipulator.manipulateAsync(source, [], {
     compress: 1,
     format: ImageManipulator.SaveFormat.JPEG,
   });
@@ -80,7 +96,7 @@ export async function compressImageForUpload(
   while (maxDimension >= minDimension) {
     for (const quality of qualities) {
       const actions = resizeActions(probe.width, probe.height, maxDimension);
-      const result = await ImageManipulator.manipulateAsync(uri, actions, {
+      const result = await ImageManipulator.manipulateAsync(source, actions, {
         compress: quality,
         format: ImageManipulator.SaveFormat.JPEG,
       });

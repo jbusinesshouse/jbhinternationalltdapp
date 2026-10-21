@@ -1,4 +1,9 @@
+import StoreTypeFilter from '@/components/home/StoreTypeFilter';
 import SingleProduct from '@/components/SingleProduct';
+import {
+    type CatalogStoreType,
+    useCatalogPrefs,
+} from '@/hooks/useCatalogPrefs';
 import { searchProducts } from '@/lib/catalogApi';
 import { styles as prodStyles } from '@/styles/product';
 import { styles } from '@/styles/search';
@@ -13,7 +18,7 @@ import {
     TextInput,
     TouchableOpacity,
     useWindowDimensions,
-    View
+    View,
 } from 'react-native';
 
 type Product = {
@@ -42,48 +47,61 @@ const Search = () => {
     const { width, height } = useWindowDimensions();
     const navigation = useNavigation();
     const { query } = useLocalSearchParams<{ query?: string }>();
+    const { storeType, setStoreType } = useCatalogPrefs();
 
     const [searchVal, setSearchVal] = useState('');
+    /** Query actually sent to the API (route param or last Search tap). */
+    const [activeQuery, setActiveQuery] = useState('');
     const [products, setProducts] = useState<Product[]>([]);
     const [loading, setLoading] = useState(false);
 
     const calculatedWidth = width - 30 - 50;
     const calculatedHeight = height - 50;
 
-    // ✅ sync query from route
     useEffect(() => {
-        if (query) {
-            const decoded = decodeURIComponent(query);
-            setSearchVal(decoded);
-            fetchProducts(decoded);
-        }
+        if (!query) return;
+        const decoded = decodeURIComponent(query);
+        setSearchVal(decoded);
+        setActiveQuery(decoded);
     }, [query]);
+
+    useEffect(() => {
+        const term = activeQuery.trim();
+        if (!term) return;
+
+        let cancelled = false;
+        (async () => {
+            setLoading(true);
+            try {
+                const data = await searchProducts(term, { storeType });
+                if (!cancelled) {
+                    setProducts((data || []).map(mapSearchProduct));
+                }
+            } catch (err) {
+                if (__DEV__) {
+                    console.log('Search exception:', err);
+                }
+                if (!cancelled) setProducts([]);
+            } finally {
+                if (!cancelled) setLoading(false);
+            }
+        })();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [activeQuery, storeType]);
 
     const handleBackPress = () => {
         navigation.goBack();
     };
 
-    // ✅ fetch from API
-    const fetchProducts = async (search: string) => {
-        if (!search.trim()) return;
-
-        setLoading(true);
-
-        try {
-            const data = await searchProducts(search);
-            setProducts((data || []).map(mapSearchProduct));
-        } catch (err) {
-            if (__DEV__) {
-                console.log('Search exception:', err);
-            }
-            setProducts([]);
-        } finally {
-            setLoading(false);
-        }
+    const handleSearch = () => {
+        setActiveQuery(searchVal.trim());
     };
 
-    const handleSearch = () => {
-        fetchProducts(searchVal);
+    const handleStoreTypeChange = (next: CatalogStoreType) => {
+        setStoreType(next);
     };
 
     const renderItem = ({ item }: { item: Product }) => (
@@ -101,15 +119,22 @@ const Search = () => {
     );
 
     const header = () => (
-        <Text style={styles.searchForText}>
-            Showing Results For{' '}
-            <Text style={{ fontWeight: '600' }}>'{searchVal}'</Text>
-        </Text>
+        <View>
+            <Text style={styles.searchForText}>
+                Showing Results For{' '}
+                <Text style={{ fontWeight: '600' }}>'{activeQuery || searchVal}'</Text>
+            </Text>
+            <View style={{ marginTop: 12, marginBottom: 4 }}>
+                <StoreTypeFilter
+                    value={storeType}
+                    onChange={handleStoreTypeChange}
+                />
+            </View>
+        </View>
     );
 
     return (
         <View>
-            {/* HEADER */}
             <View style={prodStyles.productHead}>
                 <Pressable onPress={handleBackPress}>
                     <Image
@@ -125,6 +150,8 @@ const Search = () => {
                         style={prodStyles.searchInp}
                         placeholder="Search For Products"
                         placeholderTextColor="#9CA3AF"
+                        onSubmitEditing={handleSearch}
+                        returnKeyType="search"
                     />
 
                     <TouchableOpacity
@@ -139,7 +166,6 @@ const Search = () => {
                 </View>
             </View>
 
-            {/* BODY */}
             <View style={{ height: calculatedHeight }}>
                 <View style={styles.container}>
                     {loading ? (

@@ -24,6 +24,7 @@ type Notification = {
     is_read: boolean
     created_at: string
     order_id?: string | null
+    chat_room_id?: string | null
     type?: string | null
     action_completed?: boolean | null
 }
@@ -138,6 +139,18 @@ const Notifications = () => {
             await markAsRead(item.id)
         }
 
+        if (item.type === 'chat_message') {
+            if (item.chat_room_id) {
+                router.push({
+                    pathname: '/messages/[id]',
+                    params: { id: item.chat_room_id },
+                })
+            } else {
+                router.push('/(tabs)/messages')
+            }
+            return
+        }
+
         if (!item.order_id) return
 
         if (item.type === 'order_review_request') {
@@ -145,12 +158,16 @@ const Notifications = () => {
             return
         }
 
-        // 🧠 ROUTING BASED ON STORE TYPE
-        if (storeType === 'wholesale') {
+        if (
+            item.type === 'product_review' ||
+            item.type === 'order_cancel_response' ||
+            storeType === 'wholesale'
+        ) {
             router.push(`/sales/${item.order_id}`)
-        } else {
-            router.push(`/orders/${item.order_id}`)
+            return
         }
+
+        router.push(`/orders/${item.order_id}`)
     }
 
     /* ================= UI ================= */

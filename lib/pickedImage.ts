@@ -7,6 +7,15 @@ import * as FileSystem from "expo-file-system/legacy";
 
 export const PICKED_IMAGES_DIR = "jbh-picked-images";
 
+/** Yield so a loading label can paint before image compression blocks the JS thread. */
+export function waitForNextPaint(): Promise<void> {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => {
+      setTimeout(resolve, 0);
+    });
+  });
+}
+
 function stagingRoot(): string {
   const root = FileSystem.documentDirectory;
   if (!root) {
@@ -88,6 +97,9 @@ async function preparePickedImage(
     const compressed = await compress(staged);
     return await finalizeCompressedToStaging(compressed, [staged]);
   } catch (error) {
+    if (__DEV__) {
+      console.error("[pickedImage] prepare failed:", error);
+    }
     await deleteLocalImageUris([staged]);
     throw error;
   }

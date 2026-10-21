@@ -8,7 +8,9 @@ import {
     uploadAvatar as uploadAvatarApi,
     upsertMyProfile,
 } from '@/lib/catalogApi'
+import { canSell } from '@/lib/accountStatus'
 import { goToSignIn } from '@/lib/guestAuth'
+import { isProductListingAccount } from '@/lib/moqRules'
 import { compressAvatarImage } from '@/lib/compressImage'
 import {
     deleteLocalImageUris,
@@ -20,6 +22,7 @@ import {
     enablePushNotificationsFromSettings,
     getNotificationPermissionStatus,
     openSystemNotificationSettings,
+    registerPushTokenWithBackend,
 } from '@/lib/pushNotifications'
 import { styles } from '@/styles/profile'
 import { Picker } from '@react-native-picker/picker'
@@ -110,6 +113,7 @@ const UPAZILA = [
 ];
 
 const IncompleteProfile = ({ onSaved }: { onSaved: () => void }) => {
+    const { refreshProfile } = useUser()
     const [saving, setSaving] = useState(false)
     const [form, setForm] = useState({
         full_name: '',
@@ -153,6 +157,7 @@ const IncompleteProfile = ({ onSaved }: { onSaved: () => void }) => {
                 district,
                 upazila,
             })
+            await refreshProfile()
 
             showAppAlert('সফল', 'প্রোফাইল সম্পন্ন হয়েছে!')
             onSaved()
@@ -305,7 +310,6 @@ const isProfileComplete = (profile: any): boolean => {
 /* ================= MAIN PROFILE SCREEN ================= */
 
 const Profile = () => {
-    const { profile: stsProfil } = useUser();
     const navigation = useNavigation()
     const router = useRouter()
 
@@ -375,6 +379,8 @@ const Profile = () => {
 
     const isSeller = profile.store_type === 'wholesale'
     const isBuyer = profile.store_type === 'retail'
+    const canUploadProducts =
+        isProductListingAccount(profile.store_type) && canSell(profile.status)
 
     const handleSave = async () => {
         if (!name.trim() || saving) return
@@ -551,7 +557,7 @@ const Profile = () => {
                 </View>
 
                 <View style={styles.section}>
-                    {isSeller && stsProfil?.status === "active" && <ProductUpComp title="Upload Product" />}
+                    {canUploadProducts && <ProductUpComp title="Upload Product" />}
                     {isSeller && <ProfileLink title="Sales Orders" link="/sales" />}
                     {isSeller && (
                         <ProfileLink
@@ -672,7 +678,16 @@ const NotificationPermissionRow = () => {
 
             const run = async () => {
                 const current = await refresh()
-                if (cancelled || current !== 'undetermined' || askedOnceRef.current) {
+                if (cancelled) return
+
+                // Permission can be turned on in system Settings without the app
+                // ever posting the Expo token. Save it whenever we see "granted".
+                if (current === 'granted') {
+                    void registerPushTokenWithBackend({ requestPermission: false })
+                    return
+                }
+
+                if (current !== 'undetermined' || askedOnceRef.current) {
                     return
                 }
 

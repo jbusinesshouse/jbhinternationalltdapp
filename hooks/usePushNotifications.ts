@@ -8,16 +8,34 @@ import {
 } from "@/lib/pushNotifications";
 import { router } from "expo-router";
 import { useEffect, useRef } from "react";
-import { Platform } from "react-native";
+import { AppState, Platform } from "react-native";
 
 function navigateFromPush(data: Record<string, unknown> | undefined) {
-  const { type, orderId } = parsePushData(data);
+  const { type, orderId, roomId } = parsePushData(data);
+
+  if (type === "chat_message" && roomId) {
+    router.push({
+      pathname: "/messages/[id]",
+      params: { id: roomId },
+    });
+    return;
+  }
+
+  if (type === "chat_message") {
+    router.push("/(tabs)/messages");
+    return;
+  }
+
   if (!orderId) {
     router.push("/notifications");
     return;
   }
 
-  if (type === "order_received" || type === "order_cancel_response") {
+  if (
+    type === "order_received" ||
+    type === "order_cancel_response" ||
+    type === "product_review"
+  ) {
     router.push(`/sales/${orderId}`);
     return;
   }
@@ -53,12 +71,24 @@ export function usePushNotifications() {
     if (loading) return;
     if (Platform.OS === "web") return;
 
-    if (!user) {
-      void unregisterPushTokenFromBackend();
-      return;
-    }
+    const syncToken = () => {
+      if (!user) {
+        void unregisterPushTokenFromBackend();
+        return;
+      }
+      // Only register when already granted — do not pop the system prompt here.
+      // Runs again when the app returns to the foreground, so turning notifications
+      // on in system Settings still saves the device token.
+      void registerPushTokenWithBackend({ requestPermission: false });
+    };
 
-    void registerPushTokenWithBackend({ requestPermission: false });
+    syncToken();
+
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state === "active") syncToken();
+    });
+
+    return () => sub.remove();
   }, [user, loading]);
 
   useEffect(() => {

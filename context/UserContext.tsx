@@ -2,7 +2,7 @@ import { fetchMyProfile } from '@/lib/catalogApi'
 import { unregisterPushTokenFromBackend } from '@/lib/pushNotifications'
 import { supabase } from '@/lib/supabase'
 import { Session, User } from '@supabase/supabase-js'
-import { createContext, useContext, useEffect, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 
 type Profile = {
     id: string
@@ -38,18 +38,34 @@ export const UserProvider = ({ children }: { children: React.ReactNode }) => {
     const [profile, setProfile] = useState<Profile | null>(null)
     const [loading, setLoading] = useState(true)
     const [isSettingUp, setIsSettingUp] = useState(false)
+    const fetchGen = useRef(0)
 
-    const fetchProfile = async (_userId?: string) => {
+    const fetchProfile = useCallback(async () => {
+        const gen = ++fetchGen.current
         try {
             const res = await fetchMyProfile()
+            if (gen !== fetchGen.current) return
             setProfile(res.profile)
         } catch (err) {
+            if (gen !== fetchGen.current) return
             if (__DEV__) {
                 console.warn('fetchProfile failed:', err)
             }
             setProfile(null)
         }
-    }
+    }, [])
+
+    // Reads the live session, not React state, so signup can refresh
+    // immediately after the profile row is written.
+    const refreshProfile = useCallback(async () => {
+        const { data } = await supabase.auth.getSession()
+        if (!data.session) {
+            fetchGen.current += 1
+            setProfile(null)
+            return
+        }
+        await fetchProfile()
+    }, [fetchProfile])
 
     useEffect(() => {
         let mounted = true
@@ -72,8 +88,9 @@ export const UserProvider = ({ children }: { children: React.ReactNode }) => {
             markReady()
 
             if (session?.user) {
-                void fetchProfile(session.user.id)
+                void fetchProfile()
             } else {
+                fetchGen.current += 1
                 setProfile(null)
             }
         })
@@ -83,7 +100,7 @@ export const UserProvider = ({ children }: { children: React.ReactNode }) => {
             clearTimeout(safetyTimeout)
             subscription.unsubscribe()
         }
-    }, [])
+    }, [fetchProfile])
 
     const signOut = async () => {
         await unregisterPushTokenFromBackend()
@@ -99,7 +116,7 @@ export const UserProvider = ({ children }: { children: React.ReactNode }) => {
                 loading,
                 isSettingUp,
                 setIsSettingUp,
-                refreshProfile: () => user ? fetchProfile(user.id) : Promise.resolve(),
+                refreshProfile,
                 signOut,
             }}
         >

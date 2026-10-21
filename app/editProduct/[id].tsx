@@ -15,7 +15,14 @@ import {
     isPreparedImageUri,
     preparePickedProductImage,
     preparePickedProductImages,
+    waitForNextPaint,
 } from '@/lib/pickedImage';
+import { canSell, sellBlockMessage } from '@/lib/accountStatus';
+import {
+    isProductListingAccount,
+    minimumOrderQuantityForStoreType,
+    moqValidationMessage,
+} from '@/lib/moqRules';
 import {
     parsePositiveInt,
     parsePositiveNumber,
@@ -24,6 +31,7 @@ import {
     storagePathFromPublicUrl,
     uploadProductImage,
 } from '@/lib/productMedia';
+import { buyerPriceVatHint } from '@/lib/vat';
 import { styles } from '@/styles/productUpload';
 import Feather from '@expo/vector-icons/Feather';
 import { Picker } from '@react-native-picker/picker';
@@ -76,7 +84,10 @@ const EditProduct = () => {
     const { id } = useLocalSearchParams<{ id: string }>();
     const sizesRequestIdRef = useRef(0);
 
-    const accountBlocked = !!(profile?.status && profile.status !== 'active');
+    const storeType = (profile as { store_type?: string } | null)?.store_type;
+    const canListProducts = isProductListingAccount(storeType);
+    const minOrderQty = minimumOrderQuantityForStoreType(storeType);
+    const accountBlocked = !canSell(profile?.status);
 
     const [loading, setLoading] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -189,7 +200,12 @@ const EditProduct = () => {
             }
 
             setName(product.name || '');
-            setPrice(String(product.price ?? ''));
+            // sellers enter base (ex-VAT); API exposes price_base + inclusive price
+            setPrice(
+                String(
+                    product.price_base ?? product.price ?? ''
+                )
+            );
             setMoq(String(product.moq ?? ''));
             setDescription(product.description || '');
             setCategory(product.selected_category || '');
@@ -241,12 +257,12 @@ const EditProduct = () => {
 
         const result = await ImagePicker.launchImageLibraryAsync({
             mediaTypes: ['images'],
-            allowsEditing: true,
-            quality: 0.8,
+            quality: 1,
         });
         if (result.canceled) return;
 
         setPickingImages(true);
+        await waitForNextPaint();
         try {
             const prepared = await preparePickedProductImage(result.assets[0].uri);
             if (mainImageIsNew && mainImage && isPreparedImageUri(mainImage)) {
@@ -273,12 +289,13 @@ const EditProduct = () => {
         const result = await ImagePicker.launchImageLibraryAsync({
             mediaTypes: ['images'],
             allowsMultipleSelection: true,
-            quality: 0.7,
+            quality: 1,
             selectionLimit: remaining,
         });
         if (result.canceled) return;
 
         setPickingImages(true);
+        await waitForNextPaint();
         try {
             const prepared = await preparePickedProductImages(
                 result.assets.map((asset) => asset.uri)
@@ -359,6 +376,7 @@ const EditProduct = () => {
 
     const validateForm = (): string | null => {
         if (!profile) return 'প্রোফাইল লোড হচ্ছে। একটু পর আবার চেষ্টা করুন।';
+        if (!canListProducts) return 'শুধুমাত্র রিটেইল বা হোলসেল বিক্রেতারা প্রোডাক্ট এডিট করতে পারবেন।';
         if (accountBlocked) {
             const statusBn =
                 profile.status === 'freeze'
@@ -373,7 +391,8 @@ const EditProduct = () => {
         if (!parentCategoryId) return 'মূল ক্যাটাগরি বাছুন।';
         if (!subCategoryId || !category.trim()) return 'নির্দিষ্ট ক্যাটাগরি বাছুন।';
         if (parsePositiveNumber(price) == null) return 'সঠিক দাম লিখুন।';
-        if (parsePositiveInt(moq) == null) return 'সঠিক ন্যূনতম অর্ডার পরিমাণ (MOQ) লিখুন।';
+        const moqError = moqValidationMessage(storeType, parsePositiveInt(moq));
+        if (moqError) return moqError;
         if (plainTextFromHtml(description).length === 0) return 'প্রোডাক্টের বিবরণ লিখুন।';
         if (variants.length === 0) return 'অন্তত একটি রঙের ভ্যারিয়েন্ট যোগ করুন।';
 
@@ -409,6 +428,11 @@ const EditProduct = () => {
         try {
             const parsedPrice = parsePositiveNumber(price)!;
             const parsedMoq = parsePositiveInt(moq)!;
+            const submitMoqError = moqValidationMessage(storeType, parsedMoq);
+            if (submitMoqError) {
+                showAppAlert('যাচাই ব্যর্থ', submitMoqError);
+                return;
+            }
             const productId = String(id);
 
             const imagePayload: {
@@ -518,7 +542,7 @@ const EditProduct = () => {
         );
     }
 
-    const submitDisabled = isSubmitting || accountBlocked || !profile;
+    const submitDisabled = isSubmitting || accountBlocked || !canListProducts || !profile;
 
     return (
         <View style={styles.page}>
@@ -634,7 +658,22 @@ const EditProduct = () => {
                 <View style={styles.section}>
                     <TextInput placeholder="Product Name" placeholderTextColor="#9CA3AF" value={name} onChangeText={setName} style={styles.input} />
                     <TextInput placeholder="Price (BDT) Per Item" placeholderTextColor="#9CA3AF" keyboardType="numeric" value={price} onChangeText={setPrice} style={styles.input} />
-                    <TextInput placeholder="MOQ" keyboardType="numeric" placeholderTextColor="#9CA3AF" value={moq} onChangeText={setMoq} style={styles.input} />
+                    {(() => {
+                        const vatHint = buyerPriceVatHint(price, storeType);
+                        return vatHint ? (
+                            <Text style={{ color: '#6B7280', fontSize: 12, marginTop: -6, marginBottom: 10 }}>
+                                {vatHint}
+                            </Text>
+                        ) : null;
+                    })()}
+                    <TextInput
+                        placeholder={minOrderQty != null ? `MOQ (min ${minOrderQty})` : 'MOQ'}
+                        keyboardType="numeric"
+                        placeholderTextColor="#9CA3AF"
+                        value={moq}
+                        onChangeText={setMoq}
+                        style={styles.input}
+                    />
                     <RichTextEditor value={description} onChange={setDescription} />
                 </View>
 

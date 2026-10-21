@@ -12,6 +12,7 @@ export type AdvertisedProduct = ProductFeedItem & {
 type FetchActiveAdvertisedProductsOptions = {
   categoryId?: string;
   subcategoryId?: string;
+  storeType?: "all" | "retail" | "wholesale";
   blockedUserIds?: string[];
   limit?: number;
 };
@@ -19,11 +20,17 @@ type FetchActiveAdvertisedProductsOptions = {
 export async function fetchActiveAdvertisedProducts(
   options: FetchActiveAdvertisedProductsOptions = {}
 ): Promise<AdvertisedProduct[]> {
-  const { categoryId, subcategoryId, limit: explicitLimit } = options;
+  const {
+    categoryId,
+    subcategoryId,
+    storeType,
+    limit: explicitLimit,
+  } = options;
 
   const params = new URLSearchParams();
   if (categoryId) params.set("categoryId", categoryId);
   if (subcategoryId) params.set("subcategoryId", subcategoryId);
+  if (storeType && storeType !== "all") params.set("storeType", storeType);
   const qs = params.toString();
 
   const res = await apiRequest<{ products: AdvertisedProduct[] }>(

@@ -4,7 +4,6 @@ import { UserProvider, useUser } from '@/context/UserContext'
 import useAppUpdate from '@/hooks/useAppUpdate'
 import { useProtectedRoute } from "@/hooks/useAuth"
 import { useKeyboardBehavior } from '@/hooks/useKeyboardBehavior'
-import usePlatformFeeDueAlert from '@/hooks/usePlatformFeeDueAlert'
 import { usePushNotifications } from '@/hooks/usePushNotifications'
 import { Stack } from "expo-router"
 import * as SplashScreen from 'expo-splash-screen'
@@ -17,8 +16,14 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler'
  */
 const AccountStatusBanner = ({ status }: { status: string }) => {
   const config = {
-    freeze: { color: '#ef4444', text: 'আপনার অ্যাকাউন্ট স্থগিত আছে। সাপোর্টে যোগাযোগ করুন।' },
-    restricted: { color: '#f59e0b', text: 'আপনার অ্যাকাউন্ট সীমিত করা হয়েছে। কিছু সুবিধা ব্যবহার করা যাবে না।' }
+    freeze: {
+      color: '#ef4444',
+      text: 'আপনার অ্যাকাউন্ট স্থগিত আছে। অর্ডার, বিক্রয় ও চ্যাট বন্ধ। সাপোর্টে যোগাযোগ করুন।',
+    },
+    restricted: {
+      color: '#f59e0b',
+      text: 'আপনার অ্যাকাউন্ট যাচাইয়ের অপেক্ষায় / সীমিত। প্রোডাক্ট আপলোড ও বিক্রয় বন্ধ।',
+    },
   }[status as 'freeze' | 'restricted'] || { color: '#6b7280', text: 'অ্যাকাউন্ট সম্পর্কে নোটিশ' };
 
   return (
@@ -33,7 +38,6 @@ function RootLayoutNav() {
   useProtectedRoute();
 
   useAppUpdate();
-  usePlatformFeeDueAlert();
   usePushNotifications();
 
   // Hide splash as soon as this tree mounts — do NOT call preventAutoHideAsync

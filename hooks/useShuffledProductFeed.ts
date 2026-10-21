@@ -7,6 +7,7 @@ type UseShuffledProductFeedOptions = {
   categoryId?: string;
   subcategoryId?: string;
   sellerId?: string;
+  storeType?: "all" | "retail" | "wholesale";
   /** Product IDs already shown as sponsored — excluded from organic feed. */
   excludeProductIds?: string[];
   enabled?: boolean;
@@ -20,6 +21,7 @@ export function useShuffledProductFeed({
   categoryId,
   subcategoryId,
   sellerId,
+  storeType = "all",
   excludeProductIds = [],
   enabled = true,
 }: UseShuffledProductFeedOptions = {}) {
@@ -83,6 +85,7 @@ export function useShuffledProductFeed({
           categoryId,
           subcategoryId,
           sellerId,
+          storeType,
           excludeProductIds: [...excludeIdsRef.current],
         });
 
@@ -129,7 +132,7 @@ export function useShuffledProductFeed({
         }
       }
     },
-    [categoryId, subcategoryId, sellerId, excludeIdsKey]
+    [categoryId, subcategoryId, sellerId, storeType, excludeIdsKey]
   );
 
   useEffect(() => {

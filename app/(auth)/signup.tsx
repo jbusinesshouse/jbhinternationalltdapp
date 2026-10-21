@@ -21,7 +21,6 @@ import React, { useEffect, useRef, useMemo, useState } from 'react'
 import {
     ActivityIndicator,
     Image,
-    Linking,
     ScrollView,
     StyleSheet,
     Text,
@@ -100,10 +99,6 @@ const UPAZILA = [
 ];
 
 
-const PRIVACY_POLICY_URL = "https://sites.google.com/view/jbhinternational-privacypolicy?usp=sharing"
-const TERMS_AND_CONDITIONS_URL = "https://sites.google.com/view/termcondition-jbhinternational?usp=sharing"
-
-
 const Signup = () => {
     const [loading, setLoading] = useState(false)
 
@@ -125,7 +120,7 @@ const Signup = () => {
     const [isChecked, setChecked] = useState(false);
     const [referralCode, setReferralCode] = useState('')
 
-    const { setIsSettingUp } = useAuth();
+    const { setIsSettingUp, refreshProfile } = useAuth();
 
     useEffect(() => {
         localImageUriRef.current = image && isPreparedImageUri(image) ? image : null;
@@ -279,6 +274,7 @@ const Signup = () => {
                 avatar_url: avatarUrl,
                 referral_creator_id: referralCreatorId,
             })
+            await refreshProfile()
 
             showAppAlert(
                 'সফল',
@@ -412,7 +408,23 @@ const Signup = () => {
                         onValueChange={setChecked}
                         color={isChecked ? '#4630EB' : undefined}
                     />
-                    <Text style={[styles.acceptRule, { flex: 1 }]}>By checking the box, you agree to our <Text style={{ ...styles.acceptRule, color: 'blue' }} onPress={() => Linking.openURL(PRIVACY_POLICY_URL)}>Privacy Policy</Text> and <Text style={{ ...styles.acceptRule, color: 'blue' }} onPress={() => Linking.openURL(TERMS_AND_CONDITIONS_URL)}>Terms & Conditions</Text>.</Text>
+                    <Text style={[styles.acceptRule, { flex: 1 }]}>
+                        By checking the box, you agree to our{' '}
+                        <Text
+                            style={{ ...styles.acceptRule, color: 'blue' }}
+                            onPress={() => router.push('/privacyPolicy')}
+                        >
+                            Privacy Policy
+                        </Text>
+                        {' '}and{' '}
+                        <Text
+                            style={{ ...styles.acceptRule, color: 'blue' }}
+                            onPress={() => router.push('/termsAndConditions')}
+                        >
+                            Terms & Conditions
+                        </Text>
+                        .
+                    </Text>
                 </View>
 
                 <TouchableOpacity style={styles.button} onPress={handleSignup}>

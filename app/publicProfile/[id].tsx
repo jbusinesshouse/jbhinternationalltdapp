@@ -12,6 +12,7 @@ import {
   fetchPublicProfileProducts,
 } from "@/lib/catalogApi";
 import { promptLoginRequired } from "@/lib/guestAuth";
+import { isProductListingAccount } from "@/lib/moqRules";
 import { styles as sharedStyles } from "@/styles/profile";
 import { router, useLocalSearchParams, useNavigation } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -124,7 +125,7 @@ const PublicProfile = () => {
       }
 
       setProfile(data);
-      if (data?.store_type === "wholesale") {
+      if (isProductListingAccount(data?.store_type)) {
         await loadProducts(data.id);
       }
     } catch (error) {
@@ -147,7 +148,7 @@ const PublicProfile = () => {
   const listHeader = useMemo(() => {
     if (!profile) return null;
 
-    const isWholesale = profile.store_type === "wholesale";
+    const listsProducts = isProductListingAccount(profile.store_type);
 
     return (
       <View>
@@ -170,7 +171,7 @@ const PublicProfile = () => {
                 {locationLine}
               </Text>
             ) : null}
-            {isWholesale ? (
+            {listsProducts ? (
               <Text style={s.productCount}>
                 {query.trim()
                   ? `${filteredProducts.length} of ${products.length}`
@@ -215,7 +216,7 @@ const PublicProfile = () => {
           </View>
         ) : null}
 
-        {isWholesale ? (
+        {listsProducts ? (
           <>
             <Text style={s.catalogHeading}>Products</Text>
             {products.length > 0 ? (
@@ -230,7 +231,7 @@ const PublicProfile = () => {
           </>
         ) : (
           <Text style={s.emptyCatalog}>
-            This store does not list wholesale products
+            This store does not list products
           </Text>
         )}
       </View>
@@ -260,7 +261,7 @@ const PublicProfile = () => {
     );
   }
 
-  const isWholesale = profile.store_type === "wholesale";
+  const listsProducts = isProductListingAccount(profile.store_type);
 
   return (
     <View style={s.container}>
@@ -303,7 +304,7 @@ const PublicProfile = () => {
         </Pressable>
       </Modal>
 
-      {isWholesale ? (
+      {listsProducts ? (
         <FlatList
           data={filteredProducts}
           keyExtractor={(item) => item.id}

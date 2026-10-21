@@ -1,3 +1,4 @@
+import * as FileSystem from "expo-file-system/legacy";
 import { supabase } from "@/lib/supabase";
 
 /**
@@ -164,13 +165,33 @@ export async function apiUpload<T>(
   return json as T;
 }
 
-/** Build a RN-friendly file part for FormData. */
+function base64ToBytes(base64: string): Uint8Array {
+  const binary = globalThis.atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
+/**
+ * File part for Expo's fetch FormData.
+ * `{ uri, name, type }` is rejected, and `File.bytes()` misses Expo Go paths
+ * whose folder name is percent-encoded (`%40`, `%2F`).
+ */
 export function filePartFromUri(
   uri: string,
   name = "photo.jpg",
   type = "image/jpeg"
-): { uri: string; name: string; type: string } {
-  return { uri, name, type };
+): { name: string; type: string; bytes: () => Promise<Uint8Array> } {
+  return {
+    name,
+    type,
+    bytes: async () => {
+      const base64 = await FileSystem.readAsStringAsync(uri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+      return base64ToBytes(base64);
+    },
+  };
 }
 
 export function getApiBaseUrl(): string {

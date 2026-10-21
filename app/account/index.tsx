@@ -5,6 +5,7 @@ import StoreProductSearch, {
 } from '@/components/StoreProductSearch'
 import { useProfile } from '@/hooks/useProfile'
 import { deleteProduct, fetchAccountProducts } from '@/lib/catalogApi'
+import { isProductListingAccount } from '@/lib/moqRules'
 import { styles } from '@/styles/profile'
 import { router, useNavigation } from 'expo-router'
 import React, { useEffect, useMemo, useState } from 'react'
@@ -66,7 +67,7 @@ const Account = () => {
     }
 
     useEffect(() => {
-        if (profile?.id && profile?.store_type === 'wholesale') {
+        if (profile?.id && isProductListingAccount(profile.store_type)) {
             fetchProducts()
         }
     }, [profile?.id, profile?.store_type])
@@ -166,7 +167,7 @@ const Account = () => {
                 />
 
                 {/* PRODUCTS */}
-                {profile.store_type === 'wholesale' && (
+                {isProductListingAccount(profile.store_type) && (
                     <View style={s.productSection}>
                         <View style={s.productSectionHead}>
                             <Text style={s.sectionTitle}>Your Products</Text>

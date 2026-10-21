@@ -33,12 +33,16 @@ export async function fetchFeedIds(options: {
   categoryId?: string;
   subcategoryId?: string;
   sellerId?: string;
+  storeType?: "all" | "retail" | "wholesale";
   excludeProductIds?: string[];
 }) {
   const params = new URLSearchParams();
   if (options.categoryId) params.set("categoryId", options.categoryId);
   if (options.subcategoryId) params.set("subcategoryId", options.subcategoryId);
   if (options.sellerId) params.set("sellerId", options.sellerId);
+  if (options.storeType && options.storeType !== "all") {
+    params.set("storeType", options.storeType);
+  }
   if (options.excludeProductIds?.length) {
     params.set("exclude", options.excludeProductIds.join(","));
   }
@@ -65,9 +69,17 @@ export async function fetchProductDetail(productId: string) {
   }>(`/products/${productId}`, { auth: "optional" });
 }
 
-export async function searchProducts(q: string) {
+export async function searchProducts(
+  q: string,
+  options?: { storeType?: "all" | "retail" | "wholesale" }
+) {
+  const params = new URLSearchParams();
+  params.set("q", q.trim());
+  if (options?.storeType && options.storeType !== "all") {
+    params.set("storeType", options.storeType);
+  }
   const res = await apiRequest<{ products: any[] }>(
-    `/products/search?q=${encodeURIComponent(q.trim())}`,
+    `/products/search?${params.toString()}`,
     { auth: "optional" }
   );
   return res.products ?? [];

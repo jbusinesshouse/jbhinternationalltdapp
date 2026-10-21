@@ -3,6 +3,7 @@ import GridColumnSwitcher from "@/components/home/GridColumnSwitcher";
 import HomeCategories from "@/components/home/HomeCategories";
 import QuickActionsRow from "@/components/home/QuickActionsRow";
 import SellerFilterBar from "@/components/home/SellerFilterBar";
+import StoreTypeFilter from "@/components/home/StoreTypeFilter";
 import TopBar from "@/components/home/TopBar";
 import SingleProduct from "@/components/SingleProduct";
 import WholesalePromoBanner from "@/components/WholesalePromoBanner";
@@ -71,6 +72,8 @@ export default function Index() {
     toggleCategoriesExpanded,
     homeMode,
     setHomeMode,
+    storeType,
+    setStoreType,
   } = useCatalogPrefs();
 
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(
@@ -122,11 +125,13 @@ export default function Index() {
   } = useAdvertisedProducts({
     categoryId,
     subcategoryId,
+    storeType,
   });
 
   const productsFeed = useShuffledProductFeed({
     categoryId,
     subcategoryId,
+    storeType,
     excludeProductIds: advertisedIds,
     enabled: !adsLoading,
   });
@@ -308,15 +313,14 @@ export default function Index() {
               onChange={setGridColumns}
             />
           </View>
+          <View style={styles.storeTypeRow}>
+            <StoreTypeFilter value={storeType} onChange={setStoreType} />
+          </View>
           {productsFeed.filtering ? (
             <View style={styles.filterBusyRow}>
               <ActivityIndicator size="small" color="#f5832b" />
               <Text style={styles.sectionHint}>Updating products…</Text>
             </View>
-          ) : advertisedProducts.length > 0 ? (
-            <Text style={styles.sectionHint}>
-              Promoted products shown first · refreshed randomly
-            </Text>
           ) : null}
         </View>
       </View>
@@ -332,7 +336,8 @@ export default function Index() {
       featuredLoading,
       gridColumns,
       setGridColumns,
-      advertisedProducts.length,
+      storeType,
+      setStoreType,
       onNestedHorizontalFocus,
       productsFeed.filtering,
     ]
@@ -579,6 +584,9 @@ const styles = StyleSheet.create({
   sectionTitleRow: {
     flexDirection: "row",
     alignItems: "center",
+  },
+  storeTypeRow: {
+    marginTop: 10,
   },
   sectionBar: {
     width: 3,

@@ -5,6 +5,7 @@ export type SellerUploadEligibility = {
   reason?: string;
   storeType?: string | null;
   status?: string | null;
+  minMoq?: number;
 };
 
 /**

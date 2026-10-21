@@ -64,7 +64,7 @@ async function ensureAndroidChannel() {
   const N = getNotifications();
   if (!N || Platform.OS !== "android") return;
   await N.setNotificationChannelAsync("default", {
-    name: "Orders & updates",
+    name: "Orders, chat & updates",
     importance: N.AndroidImportance.HIGH,
     vibrationPattern: [0, 250, 250, 250],
     lightColor: "#f5832b",
@@ -194,6 +194,7 @@ export async function unregisterPushTokenFromBackend(): Promise<void> {
 export type PushNavData = {
   type?: string;
   orderId?: string | null;
+  roomId?: string | null;
 };
 
 export function parsePushData(
@@ -207,7 +208,15 @@ export function parsePushData(
       : typeof data.order_id === "string"
         ? data.order_id
         : null;
-  return { type, orderId };
+  const roomId =
+    typeof data.roomId === "string"
+      ? data.roomId
+      : typeof data.room_id === "string"
+        ? data.room_id
+        : typeof data.chat_room_id === "string"
+          ? data.chat_room_id
+          : null;
+  return { type, orderId, roomId };
 }
 
 /** Subscribe to notification taps. No-op in Expo Go / web. */

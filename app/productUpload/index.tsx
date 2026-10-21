@@ -14,6 +14,7 @@ import {
     isPreparedImageUri,
     preparePickedProductImage,
     preparePickedProductImages,
+    waitForNextPaint,
 } from '@/lib/pickedImage';
 import {
     parsePositiveInt,
@@ -23,8 +24,15 @@ import {
     softDeleteProduct,
     uploadProductImage,
 } from '@/lib/productMedia';
+import { canSell, sellBlockMessage } from '@/lib/accountStatus';
+import {
+    isProductListingAccount,
+    minimumOrderQuantityForStoreType,
+    moqValidationMessage,
+} from '@/lib/moqRules';
 import { fetchSellerUploadEligibility } from '@/lib/sellerGuards';
 import { supabase } from '@/lib/supabase';
+import { buyerPriceVatHint } from '@/lib/vat';
 import { styles } from '@/styles/productUpload';
 import Feather from '@expo/vector-icons/Feather';
 import { Picker } from '@react-native-picker/picker';
@@ -72,15 +80,28 @@ type Subcategory = {
 const MAX_ADDITIONAL_IMAGES = 8;
 
 const ProductUpload = () => {
-    const { profile } = useUser();
+    const { profile, refreshProfile } = useUser();
     const navigation = useNavigation();
     const router = useRouter();
     const sizesRequestIdRef = useRef(0);
+    // Sign-in loads the profile before signup finishes writing store_type.
+    const [profileChecked, setProfileChecked] = useState(false);
+
+    useEffect(() => {
+        let live = true;
+        refreshProfile().finally(() => {
+            if (live) setProfileChecked(true);
+        });
+        return () => {
+            live = false;
+        };
+    }, [refreshProfile]);
 
     const storeType = (profile as { store_type?: string } | null)?.store_type;
-    const isWholesale = storeType === 'wholesale';
-    const accountBlocked = !!(profile?.status && profile.status !== 'active');
-    const canUseUploadForm = !!profile && isWholesale && !accountBlocked;
+    const canListProducts = isProductListingAccount(storeType);
+    const minOrderQty = minimumOrderQuantityForStoreType(storeType);
+    const accountBlocked = !canSell(profile?.status);
+    const canUseUploadForm = !!profile && canListProducts && !accountBlocked;
 
     const [availableSizes, setAvailableSizes] = useState<DbSize[]>([]);
 
@@ -109,8 +130,9 @@ const ProductUpload = () => {
         loadCategories();
     }, [canUseUploadForm]);
 
-    // Kick retailers / blocked accounts off this route (deep links still land here briefly).
+    // Kick unsigned-in, non-seller, or blocked accounts off this route.
     useEffect(() => {
+        if (!profileChecked) return;
         if (!profile) return;
         if (canUseUploadForm) return;
         const t = setTimeout(() => {
@@ -118,7 +140,7 @@ const ProductUpload = () => {
             else router.replace('/(tabs)/profile');
         }, 1200);
         return () => clearTimeout(t);
-    }, [profile, canUseUploadForm, router]);
+    }, [profileChecked, profile, canUseUploadForm, router]);
 
     const loadCategories = async () => {
         try {
@@ -191,12 +213,14 @@ const ProductUpload = () => {
 
         const result = await ImagePicker.launchImageLibraryAsync({
             mediaTypes: ['images'],
-            allowsEditing: true,
-            quality: 0.8,
+            // Return the original immediately. Cropping or recompressing here
+            // freezes the screen on large photos before the preparing label can show.
+            quality: 1,
         });
         if (result.canceled) return;
 
         setPickingImages(true);
+        await waitForNextPaint();
         try {
             const prepared = await preparePickedProductImage(result.assets[0].uri);
             if (mainImage && isPreparedImageUri(mainImage)) {
@@ -222,12 +246,13 @@ const ProductUpload = () => {
         const result = await ImagePicker.launchImageLibraryAsync({
             mediaTypes: ['images'],
             allowsMultipleSelection: true,
-            quality: 0.7,
+            quality: 1,
             selectionLimit: remaining,
         });
         if (result.canceled) return;
 
         setPickingImages(true);
+        await waitForNextPaint();
         try {
             const prepared = await preparePickedProductImages(
                 result.assets.map((asset) => asset.uri)
@@ -331,7 +356,7 @@ const ProductUpload = () => {
     };
 
     const validateForm = (): string | null => {
-        if (!isWholesale) return 'শুধুমাত্র হোলসেল বিক্রেতারা প্রোডাক্ট আপলোড করতে পারবেন।';
+        if (!canListProducts) return 'শুধুমাত্র রিটেইল বা হোলসেল বিক্রেতারা প্রোডাক্ট আপলোড করতে পারবেন।';
         if (!profile) return 'প্রোফাইল লোড হচ্ছে। একটু পর আবার চেষ্টা করুন।';
         if (accountBlocked) {
             const statusBn =
@@ -350,8 +375,8 @@ const ProductUpload = () => {
         const parsedPrice = parsePositiveNumber(price);
         if (parsedPrice == null) return 'সঠিক দাম লিখুন।';
 
-        const parsedMoq = parsePositiveInt(moq);
-        if (parsedMoq == null) return 'সঠিক ন্যূনতম অর্ডার পরিমাণ (MOQ) লিখুন।';
+        const moqError = moqValidationMessage(storeType, parsePositiveInt(moq));
+        if (moqError) return moqError;
 
         if (plainTextFromHtml(description).length === 0) {
             return 'প্রোডাক্টের বিবরণ লিখুন।';
@@ -412,6 +437,19 @@ const ProductUpload = () => {
 
             const parsedPrice = parsePositiveNumber(price)!;
             const parsedMoq = parsePositiveInt(moq)!;
+            const trustedStoreType = eligibility.storeType ?? storeType;
+            let submitMoqError = moqValidationMessage(trustedStoreType, parsedMoq);
+            if (
+                !submitMoqError &&
+                typeof eligibility.minMoq === 'number' &&
+                parsedMoq < eligibility.minMoq
+            ) {
+                submitMoqError = `ন্যূনতম অর্ডার পরিমাণ কমপক্ষে ${eligibility.minMoq} হতে হবে।`;
+            }
+            if (submitMoqError) {
+                showAppAlert('যাচাই ব্যর্থ', submitMoqError);
+                return;
+            }
 
             // 1) Upload all images first (no product id required)
             const mainUpload = await uploadProductImage(mainImage!);
@@ -531,15 +569,21 @@ const ProductUpload = () => {
     };
 
     const submitDisabled =
-        isSubmitting || accountBlocked || !isWholesale || !profile;
+        isSubmitting || accountBlocked || !canListProducts || !profile;
+
+    if (!profileChecked) {
+        return (
+            <View style={[styles.page, { justifyContent: 'center', alignItems: 'center' }]}>
+                <ActivityIndicator size="large" color="#111827" />
+            </View>
+        );
+    }
 
     if (profile && !canUseUploadForm) {
-        const blockedMessage = !isWholesale
-            ? 'Only wholesale seller accounts can upload products.'
+        const blockedMessage = !canListProducts
+            ? 'Only retail or wholesale seller accounts can upload products.'
             : accountBlocked
-              ? profile.status === 'freeze'
-                ? 'Your account is frozen. Product upload is disabled.'
-                : 'Your account is restricted. Product upload is disabled.'
+              ? sellBlockMessage(profile.status)
               : 'Product upload is not available for this account.';
 
         return (
@@ -705,7 +749,22 @@ const ProductUpload = () => {
                 <View style={styles.section}>
                     <TextInput placeholder="Product Name" placeholderTextColor="#9CA3AF" value={name} onChangeText={setName} style={styles.input} />
                     <TextInput placeholder="Price (BDT) Per Item" placeholderTextColor="#9CA3AF" keyboardType="numeric" value={price} onChangeText={setPrice} style={styles.input} />
-                    <TextInput placeholder="MOQ" placeholderTextColor="#9CA3AF" keyboardType="numeric" value={moq} onChangeText={setMoq} style={styles.input} />
+                    {(() => {
+                        const vatHint = buyerPriceVatHint(price, storeType);
+                        return vatHint ? (
+                            <Text style={{ color: '#6B7280', fontSize: 12, marginTop: -6, marginBottom: 10 }}>
+                                {vatHint}
+                            </Text>
+                        ) : null;
+                    })()}
+                    <TextInput
+                        placeholder={minOrderQty != null ? `MOQ (min ${minOrderQty})` : 'MOQ'}
+                        placeholderTextColor="#9CA3AF"
+                        keyboardType="numeric"
+                        value={moq}
+                        onChangeText={setMoq}
+                        style={styles.input}
+                    />
                     <RichTextEditor value={description} onChange={setDescription} />
                 </View>
 
