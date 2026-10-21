@@ -20,7 +20,7 @@ type Props = {
 
 /**
  * Home shortcuts to existing app routes (no duplicate category browse).
- * Wholesalers get Sales; buyers get My Orders.
+ * Any account can open My Orders; wholesalers also get Sales via profile/hub.
  */
 export default function QuickActionsRow({ onBrowseSellers }: Props) {
   const { profile } = useProfile();
@@ -47,17 +47,27 @@ export default function QuickActionsRow({ onBrowseSellers }: Props) {
     },
     {
       key: "orders",
-      label: isWholesale ? "My\nsales" : "My\norders",
+      label: "My\norders",
       icon: "package",
-      onPress: () =>
-        router.push(isWholesale ? "/sales" : "/orders"),
+      onPress: () => router.push("/orders"),
     },
-    {
-      key: "support",
-      label: "Support",
-      icon: "help-circle",
-      onPress: () => router.push("/support"),
-    },
+    ...(isWholesale
+      ? [
+          {
+            key: "sales",
+            label: "My\nsales",
+            icon: "shopping-bag" as const,
+            onPress: () => router.push("/sales"),
+          } satisfies QuickAction,
+        ]
+      : [
+          {
+            key: "support",
+            label: "Support",
+            icon: "help-circle" as const,
+            onPress: () => router.push("/support"),
+          } satisfies QuickAction,
+        ]),
   ];
 
   return (

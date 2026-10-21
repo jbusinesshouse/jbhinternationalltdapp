@@ -84,6 +84,7 @@ function WholesaleHub() {
           দ্রুত লিংক
         </Text>
         <HubLink title="সেলস অর্ডার" onPress={() => router.push("/sales")} />
+        <HubLink title="আমার অর্ডার" onPress={() => router.push("/orders")} />
         <HubLink
           title="প্রোডাক্ট আপলোড"
           onPress={() => router.push("/productUpload")}
@@ -207,7 +208,7 @@ const styles = StyleSheet.create({
   header: {
     backgroundColor: "#fff",
     paddingHorizontal: 16,
-    paddingTop: 16,
+    paddingTop: 50,
     paddingBottom: 14,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: "#E5E7EB",

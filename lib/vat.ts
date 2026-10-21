@@ -21,10 +21,11 @@ function roundMoney(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
+/** Inclusive (buyer) price → nearest whole BDT; vat derived so base + vat === inclusive. */
 export function priceWithVat(base: number, rate: number): VatBreakdown {
   const safeBase = roundMoney(Number(base) || 0);
   const safeRate = Number(rate) || 0;
-  const inclusive = roundMoney(safeBase * (1 + safeRate));
+  const inclusive = Math.round(safeBase * (1 + safeRate));
   const vat = roundMoney(inclusive - safeBase);
   return { base: safeBase, vat, inclusive, rate: safeRate };
 }

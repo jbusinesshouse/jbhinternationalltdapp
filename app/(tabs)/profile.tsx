@@ -378,7 +378,6 @@ const Profile = () => {
     }
 
     const isSeller = profile.store_type === 'wholesale'
-    const isBuyer = profile.store_type === 'retail'
     const canUploadProducts =
         isProductListingAccount(profile.store_type) && canSell(profile.status)
 
@@ -571,7 +570,7 @@ const Profile = () => {
                             link="/advertiseProduct"
                         />
                     )}
-                    {isBuyer && <ProfileLink title="My Orders" link="/orders" />}
+                    <ProfileLink title="My Orders" link="/orders" />
                 </View>
 
                 {/* 🔹 GENERAL SETTINGS */}

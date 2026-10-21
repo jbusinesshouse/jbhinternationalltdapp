@@ -99,8 +99,6 @@ const DotsIndicator = ({ count, activeIndex, containerStyle }: DotsIndicatorProp
 const ProductPreview = () => {
     const { profile, user } = useUser();
 
-    const storeType =
-        (profile as { store_type?: string } | null)?.store_type ?? null;
     const [product, setProduct] = useState<Product | null>(null);
     const [variants, setVariants] = useState<Variant[]>([]);
     const [sizes, setSizes] = useState<Size[]>([]);
@@ -521,7 +519,14 @@ const ProductPreview = () => {
                         <Text style={styles.productPrice}>
                             BDT {product.price}
                         </Text>
-                        <Text style={[styles.moq, { marginTop: 2 }]}>
+                        <Text
+                            style={{
+                                marginTop: 2,
+                                fontSize: 12,
+                                color: '#9CA3AF',
+                                fontWeight: '400',
+                            }}
+                        >
                             incl. VAT
                         </Text>
                         <Text style={styles.moq}>
@@ -863,11 +868,9 @@ const ProductPreview = () => {
                     style={[
                         styles.productActOrder,
                         isOwnProduct && { width: '100%' },
-                        // Disable styling if wholesale OR frozen
-                        (storeType === "wholesale" || !canBuy(profile?.status)) &&
-                        { backgroundColor: "#ccc" }
+                        !canBuy(profile?.status) && { backgroundColor: "#ccc" },
                     ]}
-                    disabled={storeType === "wholesale" || !canBuy(profile?.status)}
+                    disabled={!canBuy(profile?.status)}
                     onPress={() => {
                         if (!user) {
                             promptLoginRequired(
@@ -925,11 +928,7 @@ const ProductPreview = () => {
                     }}
                 >
                     <Text style={styles.productActOrderText}>
-                        {!canBuy(profile?.status)
-                            ? "Account Frozen"
-                            : storeType === "wholesale"
-                                ? "Only Retailers Can Order"
-                                : "Order Now"}
+                        {!canBuy(profile?.status) ? "Account Frozen" : "Order Now"}
                     </Text>
                 </Pressable>
             </View>

@@ -12,7 +12,7 @@ export function canSell(status: string | null | undefined): boolean {
   return normalizeAccountStatus(status) === 'active'
 }
 
-/** Restricted retail buyers may still place orders; freeze may not. */
+/** Any account type may buy unless frozen. App checkout still requires sign-in. */
 export function canBuy(status: string | null | undefined): boolean {
   return normalizeAccountStatus(status) !== 'freeze'
 }
