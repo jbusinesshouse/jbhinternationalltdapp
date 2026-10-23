@@ -109,7 +109,7 @@ const AdvertiseProduct = () => {
   const handleSubmit = async () => {
     if (!selectedIds.length) {
       showAppAlert(
-        "প্রোডাক্ট বাছুন",
+        "প্রোডাক্ট সিলেক্ট করুন",
         "অ্যাডভারটাইজ করার জন্য কমপক্ষে একটি প্রোডাক্ট সিলেক্ট করুন।"
       );
       return;

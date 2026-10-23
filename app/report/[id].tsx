@@ -34,7 +34,7 @@ const ReportScreen = () => {
 
     const handleSubmit = async () => {
         if (!reason || !details.trim()) {
-            showAppAlert('তথ্য অসম্পূর্ণ', 'একটি কারণ বাছুন এবং বিস্তারিত লিখুন।');
+            showAppAlert('তথ্য অসম্পূর্ণ', 'একটি কারণ সিলেক্ট করুন এবং বিস্তারিত লিখুন।');
             return;
         }
 

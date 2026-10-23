@@ -171,7 +171,7 @@ export function formatImageProcessingError(error: unknown): string {
     lower.includes("could not load the image") ||
     lower.includes("no longer available")
   ) {
-    return "নির্বাচিত ছবি প্রক্রিয়া করা যায়নি। অনুগ্রহ করে আবার ছবি বাছুন বা অন্য ছবি ব্যবহার করুন।";
+    return "নির্বাচিত ছবি প্রক্রিয়া করা যায়নি। অনুগ্রহ করে আবার ছবি সিলেক্ট করুন বা অন্য ছবি ব্যবহার করুন।";
   }
 
   if (

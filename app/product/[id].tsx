@@ -896,7 +896,7 @@ const ProductPreview = () => {
 
                         // 2. Handle Case: No items selected
                         if (totalQty === 0) {
-                            showAppAlert('সমস্যা', 'অন্তত একটি আইটেম বাছুন।');
+                            showAppAlert('সমস্যা', 'অন্তত একটি আইটেম সিলেক্ট করুন।');
                             return;
                         }
 

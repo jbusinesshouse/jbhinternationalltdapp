@@ -388,8 +388,8 @@ const EditProduct = () => {
         }
         if (!mainImage) return 'প্রধান ছবি আপলোড করুন।';
         if (!name.trim()) return 'প্রোডাক্টের নাম লিখুন।';
-        if (!parentCategoryId) return 'মূল ক্যাটাগরি বাছুন।';
-        if (!subCategoryId || !category.trim()) return 'নির্দিষ্ট ক্যাটাগরি বাছুন।';
+        if (!parentCategoryId) return 'মূল ক্যাটাগরি সিলেক্ট করুন।';
+        if (!subCategoryId || !category.trim()) return 'নির্দিষ্ট ক্যাটাগরি সিলেক্ট করুন।';
         if (parsePositiveNumber(price) == null) return 'সঠিক দাম লিখুন।';
         const moqError = moqValidationMessage(storeType, parsePositiveInt(moq));
         if (moqError) return moqError;
@@ -405,7 +405,7 @@ const EditProduct = () => {
                 return 'একই রঙ দুবার দেওয়া যায় না। প্রতিটি রঙ আলাদা হতে হবে।';
             }
             colorKeys.add(colorKey);
-            if (v.sizes.length === 0) return `${v.color} এর জন্য অন্তত একটি সাইজ বাছুন।`;
+            if (v.sizes.length === 0) return `${v.color} এর জন্য অন্তত একটি সাইজ সিলেক্ট করুন।`;
             for (const s of v.sizes) {
                 if (parsePositiveInt(s.stock) == null) {
                     return `${v.color} - ${s.label} এর স্টক সঠিকভাবে লিখুন।`;

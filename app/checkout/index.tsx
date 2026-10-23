@@ -243,7 +243,7 @@ const Checkout = () => {
                 );
             } else if (addressMode === "saved") {
                 showAppAlert(
-                    "ঠিকানা বাছুন",
+                    "ঠিকানা সিলেক্ট করুন",
                     "ডেলিভারির জন্য একটি সংরক্ষিত ঠিকানা বেছে নিন।"
                 );
             } else {

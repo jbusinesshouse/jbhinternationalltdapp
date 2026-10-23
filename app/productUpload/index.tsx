@@ -369,8 +369,8 @@ const ProductUpload = () => {
         }
         if (!mainImage) return 'প্রধান ছবি আপলোড করুন।';
         if (!name.trim()) return 'প্রোডাক্টের নাম লিখুন।';
-        if (!parentCategoryId) return 'মূল ক্যাটাগরি বাছুন।';
-        if (!subCategoryId || !category.trim()) return 'নির্দিষ্ট ক্যাটাগরি বাছুন।';
+        if (!parentCategoryId) return 'মূল ক্যাটাগরি সিলেক্ট করুন।';
+        if (!subCategoryId || !category.trim()) return 'নির্দিষ্ট ক্যাটাগরি সিলেক্ট করুন।';
 
         const parsedPrice = parsePositiveNumber(price);
         if (parsedPrice == null) return 'সঠিক দাম লিখুন।';
@@ -396,7 +396,7 @@ const ProductUpload = () => {
             colorKeys.add(colorKey);
 
             if (variant.sizes.length === 0) {
-                return `${variant.color} এর জন্য অন্তত একটি সাইজ বাছুন।`;
+                return `${variant.color} এর জন্য অন্তত একটি সাইজ সিলেক্ট করুন।`;
             }
             for (let j = 0; j < variant.sizes.length; j++) {
                 const size = variant.sizes[j];

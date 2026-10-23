@@ -159,7 +159,7 @@ const WriteReview = () => {
     if (!canReview || !orderId || !productId || !sellerId) return;
 
     if (rating < 1) {
-      showAppAlert("রেটিং দিন", "অনুগ্রহ করে স্টার রেটিং বাছুন।");
+      showAppAlert("রেটিং দিন", "অনুগ্রহ করে স্টার রেটিং সিলেক্ট করুন।");
       return;
     }
 
