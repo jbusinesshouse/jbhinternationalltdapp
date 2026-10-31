@@ -21,6 +21,7 @@
         "foregroundImage": "./assets/images/foreground-icon.png"
       },
       "predictiveBackGestureEnabled": false,
+      "blockedPermissions": ["android.permission.RECORD_AUDIO"],
       "package": "com.jbh.internationallimited",
       "versionCode": 7
     },
@@ -52,7 +53,9 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "The app accesses your photos to create an account and uploading products."
+          "photosPermission": "The app accesses your photos to create an account and uploading products.",
+          "cameraPermission": false,
+          "microphonePermission": false
         }
       ],
       [
