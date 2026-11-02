@@ -2,7 +2,7 @@
   "expo": {
     "name": "JBH International Limited",
     "slug": "j-business-house",
-    "version": "1.0.5",
+    "version": "1.0.6",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "jbusinesshouse",
@@ -23,7 +23,7 @@
       "predictiveBackGestureEnabled": false,
       "blockedPermissions": ["android.permission.RECORD_AUDIO"],
       "package": "com.jbh.internationallimited",
-      "versionCode": 7
+      "versionCode": 8
     },
     "web": {
       "output": "static",
