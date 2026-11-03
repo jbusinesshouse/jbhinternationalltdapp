@@ -43,13 +43,6 @@ export type NotificationPermissionState =
   | "undetermined"
   | "unavailable";
 
-/** Matches app.json → expo.extra.eas.projectId */
-const EAS_PROJECT_ID = "c24f9ee5-c2bd-4c72-ac16-b9a3c995a78c";
-
-function getEasProjectId(): string | undefined {
-  return EAS_PROJECT_ID;
-}
-
 export async function getNotificationPermissionStatus(): Promise<NotificationPermissionState> {
   const N = getNotifications();
   if (!N || !Device.isDevice) return "unavailable";
@@ -72,10 +65,10 @@ async function ensureAndroidChannel() {
 }
 
 /**
- * Ask permission (optional), create Android channel, return Expo push token.
+ * Ask permission (optional), create Android channel, return the native FCM push token.
  * Pass requestPermission=false to only proceed when already granted.
  */
-export async function getExpoPushToken(options?: {
+export async function getPushToken(options?: {
   requestPermission?: boolean;
 }): Promise<string | null> {
   const requestPermission = options?.requestPermission !== false;
@@ -105,16 +98,9 @@ export async function getExpoPushToken(options?: {
     return null;
   }
 
-  const projectId = getEasProjectId();
-  if (!projectId) {
-    if (__DEV__) {
-      console.warn("[push] Missing EAS projectId");
-    }
-    return null;
-  }
-
-  const tokenResult = await N.getExpoPushTokenAsync({ projectId });
-  cachedToken = tokenResult.data;
+  // Native FCM registration token — the backend sends through Firebase directly.
+  const tokenResult = await N.getDevicePushTokenAsync();
+  cachedToken = typeof tokenResult.data === "string" ? tokenResult.data : null;
   return cachedToken;
 }
 
@@ -122,13 +108,13 @@ export async function registerPushTokenWithBackend(options?: {
   requestPermission?: boolean;
 }): Promise<string | null> {
   try {
-    const token = await getExpoPushToken(options);
+    const token = await getPushToken(options);
     if (!token) return null;
 
     await apiRequest("/push-tokens", {
       method: "POST",
       body: {
-        expoPushToken: token,
+        pushToken: token,
         platform: Platform.OS === "ios" ? "ios" : "android",
         deviceName: Device.modelName ?? Device.deviceName ?? null,
       },

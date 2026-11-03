@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "190458232643",
+    "project_id": "jbh-international-limited",
+    "storage_bucket": "jbh-international-limited.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:190458232643:android:c71e6f790511893e81f9f6",
+        "android_client_info": {
+          "package_name": "com.jbh.internationallimited"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCmyhZmueouEu6VRwcbPZXn6crFXUKwBcc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

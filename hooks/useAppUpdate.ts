@@ -1,9 +1,10 @@
 import Constants from 'expo-constants'
-import { useEffect } from 'react'
-import { Platform } from 'react-native'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { AppState, Linking, Platform } from 'react-native'
 
 const UPDATE_CHECK_TIMEOUT_MS = 8000
 const UPDATE_CHECK_DELAY_MS = 2500
+const PLAY_PACKAGE = 'com.jbh.internationallimited'
 
 /**
  * In-app updates require a custom native build.
@@ -21,46 +22,74 @@ function canUseInAppUpdates() {
   return true
 }
 
+/**
+ * Hard update wall: when Google Play has a newer version, `updateRequired`
+ * stays true until the user installs it. Check failures (offline, timeout)
+ * never block the app.
+ */
 export default function useAppUpdate() {
+  const [updateRequired, setUpdateRequired] = useState(false)
+  const checking = useRef(false)
+
+  const runCheck = useCallback(async () => {
+    if (!canUseInAppUpdates() || checking.current) return
+    checking.current = true
+
+    try {
+      const InAppUpdates = await import('expo-in-app-updates')
+
+      const result = await Promise.race([
+        InAppUpdates.checkForUpdate(),
+        new Promise<never>((_, reject) =>
+          setTimeout(
+            () => reject(new Error('Update check timed out')),
+            UPDATE_CHECK_TIMEOUT_MS
+          )
+        ),
+      ])
+
+      if (!result.updateAvailable) {
+        setUpdateRequired(false)
+        return
+      }
+
+      setUpdateRequired(true)
+      if (result.immediateAllowed) {
+        await InAppUpdates.startUpdate(true)
+      }
+    } catch (e) {
+      if (__DEV__) {
+        console.log('Update check failed:', e)
+      }
+    } finally {
+      checking.current = false
+    }
+  }, [])
+
   useEffect(() => {
     if (!canUseInAppUpdates()) return
 
-    let cancelled = false
-    const timer = setTimeout(async () => {
-      if (cancelled) return
-
-      try {
-        const InAppUpdates = await import('expo-in-app-updates')
-
-        const result = await Promise.race([
-          InAppUpdates.checkForUpdate(),
-          new Promise<never>((_, reject) =>
-            setTimeout(
-              () => reject(new Error('Update check timed out')),
-              UPDATE_CHECK_TIMEOUT_MS
-            )
-          ),
-        ])
-
-        if (cancelled) return
-
-        if (result.updateAvailable) {
-          if (result.immediateAllowed) {
-            await InAppUpdates.startUpdate(true)
-          } else if (result.flexibleAllowed) {
-            await InAppUpdates.startUpdate(false)
-          }
-        }
-      } catch (e) {
-        if (__DEV__) {
-          console.log('Update check failed:', e)
-        }
-      }
-    }, UPDATE_CHECK_DELAY_MS)
+    const timer = setTimeout(runCheck, UPDATE_CHECK_DELAY_MS)
+    // Re-check on resume so dismissing the Play dialog cannot bypass the wall.
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') void runCheck()
+    })
 
     return () => {
-      cancelled = true
       clearTimeout(timer)
+      sub.remove()
+    }
+  }, [runCheck])
+
+  const openStore = useCallback(async () => {
+    try {
+      await Linking.openURL(`market://details?id=${PLAY_PACKAGE}`)
+    } catch {
+      await Linking.openURL(
+        `https://play.google.com/store/apps/details?id=${PLAY_PACKAGE}`
+      ).catch(() => {})
     }
   }, [])
+
+  return { updateRequired, retry: runCheck, openStore }
 }

@@ -1,3 +1,4 @@
+import UpdateRequiredScreen from '@/components/UpdateRequiredScreen'
 import { AppAlertProvider } from '@/context/AppAlertContext'
 import { ChatInboxProvider } from '@/context/ChatInboxContext'
 import { UserProvider, useUser } from '@/context/UserContext'
@@ -37,7 +38,7 @@ function RootLayoutNav() {
   const { profile, loading } = useUser();
   useProtectedRoute();
 
-  useAppUpdate();
+  const { updateRequired, retry, openStore } = useAppUpdate();
   usePushNotifications();
 
   // Hide splash as soon as this tree mounts — do NOT call preventAutoHideAsync
@@ -69,6 +70,15 @@ function RootLayoutNav() {
         <Stack.Screen name="search/[query]" />
         <Stack.Screen name="messages/[id]" />
       </Stack>
+
+      {updateRequired && (
+        <UpdateRequiredScreen
+          onUpdate={() => {
+            void openStore()
+            void retry()
+          }}
+        />
+      )}
     </View>
   )
 }
