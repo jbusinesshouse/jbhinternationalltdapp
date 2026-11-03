@@ -1,3 +1,4 @@
+import NotificationPermissionModal from '@/components/NotificationPermissionModal'
 import UpdateRequiredScreen from '@/components/UpdateRequiredScreen'
 import { AppAlertProvider } from '@/context/AppAlertContext'
 import { ChatInboxProvider } from '@/context/ChatInboxContext'
@@ -70,6 +71,8 @@ function RootLayoutNav() {
         <Stack.Screen name="search/[query]" />
         <Stack.Screen name="messages/[id]" />
       </Stack>
+
+      {!updateRequired && <NotificationPermissionModal />}
 
       {updateRequired && (
         <UpdateRequiredScreen
