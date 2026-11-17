@@ -24,7 +24,8 @@ type Props = {
  */
 export default function QuickActionsRow({ onBrowseSellers }: Props) {
   const { profile } = useProfile();
-  const isWholesale = profile?.store_type === "wholesale";
+  // Retail sellers also receive orders (API /sales accepts both).
+  const isSeller = profile?.store_type === "wholesale" || profile?.store_type === "retail";
 
   const actions: QuickAction[] = [
     {
@@ -51,7 +52,7 @@ export default function QuickActionsRow({ onBrowseSellers }: Props) {
       icon: "package",
       onPress: () => router.push("/orders"),
     },
-    ...(isWholesale
+    ...(isSeller
       ? [
           {
             key: "sales",

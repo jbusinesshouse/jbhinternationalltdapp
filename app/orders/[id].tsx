@@ -1,4 +1,5 @@
 import { fetchOrderDetail } from '@/lib/catalogApi'
+import { PublicShipment, SHIPMENT_STATUS_LABEL } from '@/lib/courier'
 import { getReviewEligibility } from '@/lib/productReviews'
 import { supabase } from '@/lib/supabase'
 import { styles } from '@/styles/profile'
@@ -40,6 +41,9 @@ type Order = {
     product_id: string
     user_id: string
     order_items?: OrderItem[]
+    delivery_method?: string | null
+    delivery_fee?: number | string | null
+    cod_amount?: number | string | null
     products?: {
         seller_id?: string
         product_images?: { image_url: string; is_main: boolean }[]
@@ -56,6 +60,7 @@ const OrderDetails = () => {
     const [loading, setLoading] = useState(true)
     const [canReview, setCanReview] = useState(false)
     const [alreadyReviewed, setAlreadyReviewed] = useState(false)
+    const [shipment, setShipment] = useState<PublicShipment | null>(null)
 
     const fetchOrder = async () => {
         if (!id) return
@@ -65,6 +70,7 @@ const OrderDetails = () => {
             const res = await fetchOrderDetail(id)
             setOrder(res.order as Order)
             setSeller(res.seller as Seller | null)
+            setShipment(res.shipment ?? null)
 
             if (res.review) {
                 setCanReview(Boolean(res.review.canReview))
@@ -255,6 +261,20 @@ const OrderDetails = () => {
                     <SectionTitle>Delivery Info</SectionTitle>
                     <Info label="City" value={order.city} />
                     <Info label="Address" value={order.delivery_address} />
+                    {order.delivery_method === 'pathao' ? (
+                        <>
+                            <Info label="Pathao ডেলিভারি চার্জ" value={`৳${Number(order.delivery_fee) || 0}`} />
+                            <Info label="ডেলিভারির সময় পরিশোধ" value={`৳${Number(order.cod_amount) || 0}`} />
+                            {shipment ? (
+                                <Info
+                                    label="কুরিয়ার অবস্থা"
+                                    value={`${SHIPMENT_STATUS_LABEL[shipment.status] ?? shipment.status}${
+                                        shipment.consignment_id ? ` · ${shipment.consignment_id}` : ''
+                                    }`}
+                                />
+                            ) : null}
+                        </>
+                    ) : null}
                 </Card>
 
                 {/* DATE */}

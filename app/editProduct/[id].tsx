@@ -31,7 +31,7 @@ import {
     storagePathFromPublicUrl,
     uploadProductImage,
 } from '@/lib/productMedia';
-import { buyerPriceVatHint } from '@/lib/vat';
+import { buyerPriceServiceChargeHint } from '@/lib/serviceCharge';
 import { styles } from '@/styles/productUpload';
 import Feather from '@expo/vector-icons/Feather';
 import { Picker } from '@react-native-picker/picker';
@@ -200,7 +200,7 @@ const EditProduct = () => {
             }
 
             setName(product.name || '');
-            // sellers enter base (ex-VAT); API exposes price_base + inclusive price
+            // sellers enter base (before service charge); API exposes price_base + inclusive price
             setPrice(
                 String(
                     product.price_base ?? product.price ?? ''
@@ -659,10 +659,10 @@ const EditProduct = () => {
                     <TextInput placeholder="Product Name" placeholderTextColor="#9CA3AF" value={name} onChangeText={setName} style={styles.input} />
                     <TextInput placeholder="Price (BDT) Per Item" placeholderTextColor="#9CA3AF" keyboardType="numeric" value={price} onChangeText={setPrice} style={styles.input} />
                     {(() => {
-                        const vatHint = buyerPriceVatHint(price, storeType);
-                        return vatHint ? (
+                        const serviceChargeHint = buyerPriceServiceChargeHint(price, storeType);
+                        return serviceChargeHint ? (
                             <Text style={{ color: '#6B7280', fontSize: 12, marginTop: -6, marginBottom: 10 }}>
-                                {vatHint}
+                                {serviceChargeHint}
                             </Text>
                         ) : null;
                     })()}

@@ -14,6 +14,14 @@ import {
     toOrderDeliverySnapshot,
 } from "@/lib/deliveryAddresses";
 import { placeOrder } from "@/lib/catalogApi";
+import CourierLocationPickers from "@/components/delivery/CourierLocationPickers";
+import {
+    CourierLocation,
+    CourierQuote,
+    emptyCourierLocation,
+    fetchCourierAvailable,
+    fetchCourierQuote,
+} from "@/lib/courier";
 import { goToSignIn } from "@/lib/guestAuth";
 import { supabase } from "@/lib/supabase";
 import { styles } from "@/styles/profile";
@@ -174,6 +182,74 @@ const Checkout = () => {
         };
     }, [profile?.id, profile?.default_delivery_address_id]);
 
+    /* ---------- Pathao courier (only when available for this product) ---------- */
+    const productId = parsed?.product?.id;
+    const totalQuantity = useMemo(() => {
+        if (!parsed) return 0;
+        let sum = 0;
+        for (const sizes of Object.values(parsed.selectedQty ?? {})) {
+            for (const qty of Object.values(sizes ?? {})) sum += Number(qty) || 0;
+        }
+        return sum;
+    }, [parsed]);
+    const [courierEnabled, setCourierEnabled] = useState(false);
+    const [courierLocation, setCourierLocation] =
+        useState<CourierLocation>(emptyCourierLocation());
+    const [quoteResult, setQuoteResult] = useState<{
+        key: string;
+        quote: CourierQuote;
+    } | null>(null);
+    const [quoteNonce, setQuoteNonce] = useState(0);
+    const { city_id: qCity, zone_id: qZone, area_id: qArea } = courierLocation;
+
+    useEffect(() => {
+        if (!productId) return;
+        void fetchCourierAvailable(productId).then(setCourierEnabled);
+    }, [productId]);
+
+    const quoteKey =
+        courierEnabled && productId && totalQuantity && qCity && qZone
+            ? `${productId}|${totalQuantity}|${qCity}|${qZone}|${qArea ?? ""}|${quoteNonce}`
+            : null;
+
+    useEffect(() => {
+        if (!quoteKey || !productId || !qCity || !qZone) return;
+        let cancelled = false;
+        fetchCourierQuote({
+            product_id: productId,
+            quantity: totalQuantity,
+            city_id: qCity,
+            zone_id: qZone,
+            area_id: qArea,
+        })
+            .then((quote) => {
+                if (!cancelled) setQuoteResult({ key: quoteKey, quote });
+            })
+            .catch((err: any) => {
+                if (cancelled) return;
+                setQuoteResult({
+                    key: quoteKey,
+                    quote: {
+                        available: false,
+                        reason: "error",
+                        message: err?.message || "ডেলিভারি চার্জ হিসাব করা যায়নি।",
+                    },
+                });
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [quoteKey, productId, totalQuantity, qCity, qZone, qArea]);
+
+    const courierQuote =
+        quoteResult && quoteResult.key === quoteKey ? quoteResult.quote : null;
+    const quoting = quoteKey !== null && courierQuote === null;
+    // Seller not ready etc. → order proceeds as before (seller arranges delivery).
+    const courierUnavailableForProduct =
+        courierQuote !== null && !courierQuote.available && courierQuote.reason !== "error";
+    const useCourier = courierEnabled && !courierUnavailableForProduct;
+    const courierFee = courierQuote?.available ? courierQuote.delivery_fee : 0;
+
     if (authLoading || !user) {
         return (
             <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
@@ -255,6 +331,39 @@ const Checkout = () => {
             return;
         }
 
+        let courierDelivery:
+            | {
+                  method: "pathao";
+                  city_id: number;
+                  zone_id: number;
+                  area_id: number | null;
+                  expected_fee: number;
+              }
+            | undefined;
+        if (useCourier) {
+            if (!courierLocation.city_id || !courierLocation.zone_id) {
+                showAppAlert("ঠিকানা অসম্পূর্ণ", "হোম ডেলিভারির জন্য শহর ও জোন বাছাই করুন।");
+                return;
+            }
+            if (!courierQuote?.available) {
+                showAppAlert(
+                    "অপেক্ষা করুন",
+                    quoting
+                        ? "ডেলিভারি চার্জ হিসাব হচ্ছে।"
+                        : "ডেলিভারি চার্জ পাওয়া যায়নি। আবার চেষ্টা করুন।"
+                );
+                if (!quoting) setQuoteNonce((n) => n + 1);
+                return;
+            }
+            courierDelivery = {
+                method: "pathao",
+                city_id: courierLocation.city_id,
+                zone_id: courierLocation.zone_id,
+                area_id: courierLocation.area_id,
+                expected_fee: courierQuote.delivery_fee,
+            };
+        }
+
         setLoading(true);
 
         try {
@@ -302,6 +411,7 @@ const Checkout = () => {
                 address: delivery.delivery_address,
                 product_id: parsed.product.id,
                 items: orderItems,
+                ...(courierDelivery ? { delivery: courierDelivery } : {}),
             });
 
             showAppAlert("সফল", "আপনার অর্ডার সফলভাবে প্লেস হয়েছে।");
@@ -310,6 +420,8 @@ const Checkout = () => {
             if (__DEV__) {
                 console.log(err);
             }
+            // Fee changed between quote and order → refresh so the buyer sees the new total.
+            if (err?.code === "DELIVERY_FEE_CHANGED") setQuoteNonce((n) => n + 1);
             showAppAlert("সমস্যা", err.message || "অর্ডার প্লেস করা যায়নি।");
         } finally {
             setLoading(false);
@@ -632,6 +744,41 @@ const Checkout = () => {
                         );
                     })}
                 </View>
+
+                {courierEnabled ? (
+                    <View style={[ui.addressCard, { marginBottom: 16 }]}>
+                        <Text style={ui.addressTitle}>হোম ডেলিভারি (Pathao)</Text>
+                        <Text style={[ui.addressBody, { marginBottom: 10 }]}>
+                            ডেলিভারি চার্জ জানতে শহর, জোন ও এরিয়া বাছাই করুন। পণ্য হাতে পেয়ে মূল্য পরিশোধ করবেন।
+                        </Text>
+                        <CourierLocationPickers
+                            value={courierLocation}
+                            onChange={setCourierLocation}
+                        />
+                        {quoting ? (
+                            <ActivityIndicator style={{ marginTop: 6 }} />
+                        ) : courierQuote?.available ? (
+                            <Text style={{ fontWeight: "600", marginTop: 4 }}>
+                                ডেলিভারি চার্জ: ৳{courierQuote.delivery_fee}
+                            </Text>
+                        ) : courierQuote ? (
+                            <Text style={{ color: "#8A4B00", marginTop: 4 }}>
+                                {courierUnavailableForProduct
+                                    ? `${courierQuote.message} (বিক্রেতা নিজে ডেলিভারির ব্যবস্থা করবেন)`
+                                    : courierQuote.message}
+                            </Text>
+                        ) : null}
+                        {useCourier && courierQuote?.available ? (
+                            <Text style={{ color: "#666", marginTop: 4 }}>
+                                মোট পরিশোধ: ৳
+                                {Math.round(
+                                    Number(parsed.product.price) * totalQuantity + courierFee
+                                )}{" "}
+                                (ক্যাশ অন ডেলিভারি)
+                            </Text>
+                        ) : null}
+                    </View>
+                ) : null}
 
                 <Pressable style={ui.btn} onPress={handleSubmit}>
                     {loading ? (

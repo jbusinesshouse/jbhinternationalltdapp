@@ -49,9 +49,9 @@ export const PRIVACY_POLICY: LegalDocument = {
       paragraphs: [
         "Account and profile data: name, email address, phone number, password (handled by our authentication provider and never visible to us in readable form), profile photo, store name, store type (wholesale or retail), store address (district, upazila, address), referral code you enter at sign-up, and your account status (for example active, restricted, or freeze). Wholesale accounts are reviewed by us before selling is switched on.",
         "Photos you choose: the app asks for access to your photo library only when you pick a picture (for a profile photo, product images, or review photos). We do not browse your gallery, and the app does not use your camera, location, contacts, or microphone. Images are reduced in size on your device before upload. Pictures you upload to listings, profiles, and reviews can be opened by anyone who has the image link.",
-        "Delivery and order data: saved delivery addresses; and, for each order, your name, phone number, email (if given), city and delivery address, the items, sizes, colours and quantities, and price records (base price, VAT rate, VAT amount, and VAT-inclusive price).",
+        "Delivery and order data: saved delivery addresses; and, for each order, your name, phone number, email (if given), city and delivery address, the items, sizes, colours and quantities, and price records (base price, service charge rate, service charge amount, and final price).",
         "Ordering without an account (website): if you order as a guest we collect your name, mobile number, optional email, and delivery address. We send a one-time code by SMS to confirm your number. The code is stored only in a scrambled (hashed) form, expires within minutes, and is used once. We create a limited buyer record tied to your phone number so the order can be handled. The Android app currently requires an account to order.",
-        "Marketplace activity: product listings you create (names, descriptions, images, prices you enter as base/ex-VAT amounts, MOQ, stock and variants), reviews and ratings, and related notifications.",
+        "Marketplace activity: product listings you create (names, descriptions, images, prices you enter as base amounts, before the service charge, MOQ, stock and variants), reviews and ratings, and related notifications.",
         "Communications: chat messages between users, support requests, reports you make about users or listings (reason and any details you add), and the list of users you block.",
         "Promotions and referrals: product advertisement requests, featured-store requests, and, if you apply to be a referral / content-creator partner, your name, phone number, social platform, profile link, follower count and message.",
         "Device and technical data: your push-notification token, the platform (Android or iOS) and device model, so we can deliver notifications; the app version (to offer updates); IP address, browser or device details and basic request logs on our servers; and short-lived security records such as failed verification attempts.",
@@ -64,7 +64,7 @@ export const PRIVACY_POLICY: LegalDocument = {
       title: "4. How we use your information",
       paragraphs: [
         "To create and manage your account, check eligibility to sell or buy, and apply account statuses (restricted or freeze) when needed for safety, compliance, or policy enforcement.",
-        "To run the marketplace: show listings (including wholesale/retail filters), calculate and show VAT-inclusive prices to buyers (currently 10% on wholesale sellers’ base prices and 15% on retail sellers’ base prices), process orders, tell the people involved about order events, and keep price and VAT records.",
+        "To run the marketplace: show listings (including wholesale/retail filters), calculate and show buyers prices that include the JBH service charge (currently 10% on wholesale sellers’ base prices and 15% on retail sellers’ base prices), process orders, tell the people involved about order events, and keep price and service charge records.",
         "To let you chat, receive notifications (push and in-app), contact support, leave reviews, block users, and report problems.",
         "To process optional promotions (ads, featured stores) and referral partnerships you choose to join, including showing referral partners a limited summary of people who joined with their code.",
         "To confirm your phone number by SMS when you order as a guest, and to prevent misuse of that feature.",
@@ -93,7 +93,7 @@ export const PRIVACY_POLICY: LegalDocument = {
     {
       title: "7. How long we keep data",
       paragraphs: [
-        "We keep account and transaction data while your account is active and afterwards as needed for legal, tax, accounting, dispute, and security purposes. Order price and VAT records are kept as part of order records.",
+        "We keep account and transaction data while your account is active and afterwards as needed for legal, accounting, dispute, and security purposes. Order price and service charge records are kept as part of order records.",
         "One-time SMS codes are short-lived and are removed or become unusable soon after they expire. Push tokens are switched off when you sign out or when a device stops accepting them. If you unsubscribe from emails, we keep your email address on a do-not-email list so we do not email you again.",
         "You can ask us to delete your account (see section 9). Some data may be kept where the law or a legitimate need (for example a dispute or fraud prevention) requires it, and some data may remain in backups for a limited period.",
       ],
@@ -157,9 +157,9 @@ export const PRIVACY_POLICY: LegalDocument = {
       paragraphs: [
         "অ্যাকাউন্ট ও প্রোফাইল তথ্য: নাম, ইমেইল, ফোন নম্বর, পাসওয়ার্ড (আমাদের অথেন্টিকেশন প্রদানকারী এটি সামলায়; আমরা পড়ার মতো আকারে দেখতে পাই না), প্রোফাইল ছবি, দোকানের নাম, দোকানের ধরন (পাইকারি বা খুচরা), দোকানের ঠিকানা (জেলা, উপজেলা, ঠিকানা), সাইন আপের সময় দেওয়া রেফারেল কোড এবং অ্যাকাউন্ট স্ট্যাটাস (যেমন active, restricted বা freeze)। বিক্রি চালু করার আগে পাইকারি অ্যাকাউন্ট আমরা যাচাই করি।",
         "আপনার বাছাই করা ছবি: প্রোফাইল ছবি, পণ্যের ছবি বা রিভিউয়ের ছবি দেওয়ার সময়ই কেবল অ্যাপ আপনার ফটো লাইব্রেরিতে প্রবেশের অনুমতি চায়। আমরা আপনার গ্যালারি ঘেঁটে দেখি না, আর অ্যাপ আপনার ক্যামেরা, লোকেশন, কন্টাক্ট বা মাইক্রোফোন ব্যবহার করে না। আপলোডের আগে ছবি আপনার ডিভাইসেই ছোট করা হয়। তালিকা, প্রোফাইল ও রিভিউয়ে আপলোড করা ছবির লিংক যার কাছে আছে সে-ই ছবিটি খুলতে পারে।",
-        "ডেলিভারি ও অর্ডার তথ্য: সংরক্ষিত ডেলিভারি ঠিকানা; এবং প্রতিটি অর্ডারে আপনার নাম, ফোন নম্বর, ইমেইল (দিলে), শহর ও ডেলিভারি ঠিকানা, পণ্য, সাইজ, রং ও পরিমাণ এবং মূল্যের রেকর্ড (বেস মূল্য, ভ্যাট হার, ভ্যাটের পরিমাণ ও ভ্যাটসহ মূল্য)।",
+        "ডেলিভারি ও অর্ডার তথ্য: সংরক্ষিত ডেলিভারি ঠিকানা; এবং প্রতিটি অর্ডারে আপনার নাম, ফোন নম্বর, ইমেইল (দিলে), শহর ও ডেলিভারি ঠিকানা, পণ্য, সাইজ, রং ও পরিমাণ এবং মূল্যের রেকর্ড (বেস মূল্য, সার্ভিস চার্জ হার, সার্ভিস চার্জের পরিমাণ ও সার্ভিস চার্জসহ মূল্য)।",
         "অ্যাকাউন্ট ছাড়া অর্ডার (ওয়েবসাইট): অতিথি হিসেবে অর্ডার করলে আমরা আপনার নাম, মোবাইল নম্বর, ঐচ্ছিক ইমেইল ও ডেলিভারি ঠিকানা নিই। আপনার নম্বর নিশ্চিত করতে SMS-এ একটি এককালীন কোড পাঠাই। কোডটি শুধু এলোমেলো (হ্যাশ) আকারে রাখা হয়, কয়েক মিনিটেই মেয়াদ শেষ হয় এবং একবারই ব্যবহার করা যায়। অর্ডার সামলানোর জন্য আপনার ফোন নম্বরের সাথে যুক্ত একটি সীমিত ক্রেতা-রেকর্ড তৈরি হয়। অ্যান্ড্রয়েড অ্যাপে এখন অর্ডার করতে অ্যাকাউন্ট লাগে।",
-        "মার্কেটপ্লেস কার্যক্রম: আপনার তৈরি পণ্য তালিকা (নাম, বর্ণনা, ছবি, আপনার লেখা বেস/ভ্যাট-ছাড়া মূল্য, MOQ, স্টক ও ভ্যারিয়েন্ট), রিভিউ ও রেটিং এবং সংশ্লিষ্ট নোটিফিকেশন।",
+        "মার্কেটপ্লেস কার্যক্রম: আপনার তৈরি পণ্য তালিকা (নাম, বর্ণনা, ছবি, আপনার লেখা সার্ভিস চার্জ ছাড়া বেস মূল্য, MOQ, স্টক ও ভ্যারিয়েন্ট), রিভিউ ও রেটিং এবং সংশ্লিষ্ট নোটিফিকেশন।",
         "যোগাযোগ: ব্যবহারকারীদের মধ্যে চ্যাট মেসেজ, সাপোর্ট অনুরোধ, কোনো ব্যবহারকারী বা তালিকা সম্পর্কে আপনার রিপোর্ট (কারণ ও আপনার দেওয়া বিবরণ) এবং আপনার ব্লক করা ব্যবহারকারীদের তালিকা।",
         "প্রমোশন ও রেফারেল: পণ্য বিজ্ঞাপনের অনুরোধ, ফিচার্ড-স্টোর অনুরোধ এবং রেফারেল / কনটেন্ট-ক্রিয়েটর পার্টনার হতে আবেদন করলে আপনার নাম, ফোন নম্বর, সোশ্যাল প্ল্যাটফর্ম, প্রোফাইল লিংক, ফলোয়ার সংখ্যা ও বার্তা।",
         "ডিভাইস ও প্রযুক্তিগত তথ্য: নোটিফিকেশন পাঠানোর জন্য আপনার পুশ-নোটিফিকেশন টোকেন, প্ল্যাটফর্ম (অ্যান্ড্রয়েড বা আইওএস) ও ডিভাইসের মডেল; আপডেট দেখানোর জন্য অ্যাপের সংস্করণ; আমাদের সার্ভারে আইপি ঠিকানা, ব্রাউজার বা ডিভাইসের তথ্য ও মৌলিক রিকোয়েস্ট লগ; এবং ব্যর্থ ভেরিফিকেশন চেষ্টার মতো স্বল্পস্থায়ী নিরাপত্তা রেকর্ড।",
@@ -172,7 +172,7 @@ export const PRIVACY_POLICY: LegalDocument = {
       title: "৪. আপনার তথ্য কীভাবে ব্যবহার করি",
       paragraphs: [
         "আপনার অ্যাকাউন্ট তৈরি ও পরিচালনা করতে, বিক্রি বা কেনার যোগ্যতা যাচাই করতে এবং নিরাপত্তা, কমপ্লায়েন্স বা নীতি প্রয়োগের প্রয়োজনে restricted বা freeze স্ট্যাটাস দিতে।",
-        "মার্কেটপ্লেস চালাতে: তালিকা দেখানো (পাইকারি/খুচরা ফিল্টারসহ), ক্রেতাদের জন্য ভ্যাটসহ মূল্য হিসাব ও প্রদর্শন (বর্তমানে পাইকারি সেলারের বেস মূল্যে ১০% এবং খুচরা সেলারের বেস মূল্যে ১৫%), অর্ডার প্রক্রিয়া করা, সংশ্লিষ্টদের অর্ডারের ঘটনা জানানো এবং মূল্য ও ভ্যাটের রেকর্ড রাখা।",
+        "মার্কেটপ্লেস চালাতে: তালিকা দেখানো (পাইকারি/খুচরা ফিল্টারসহ), ক্রেতাদের জন্য সার্ভিস চার্জসহ মূল্য হিসাব ও প্রদর্শন (বর্তমানে পাইকারি সেলারের বেস মূল্যে ১০% এবং খুচরা সেলারের বেস মূল্যে ১৫%), অর্ডার প্রক্রিয়া করা, সংশ্লিষ্টদের অর্ডারের ঘটনা জানানো এবং মূল্য ও সার্ভিস চার্জের রেকর্ড রাখা।",
         "চ্যাট, নোটিফিকেশন (পুশ ও ইন-অ্যাপ), সাপোর্ট, রিভিউ, ব্লক ও সমস্যা রিপোর্টের সুবিধা দিতে।",
         "আপনি যে ঐচ্ছিক প্রমোশন (বিজ্ঞাপন, ফিচার্ড স্টোর) ও রেফারেল পার্টনারশিপে যোগ দেন তা প্রক্রিয়া করতে — রেফারেল পার্টনারদের তাদের কোডে যোগ দেওয়া ব্যক্তিদের একটি সীমিত সারসংক্ষেপ দেখানোসহ।",
         "অতিথি হিসেবে অর্ডার করলে SMS-এ আপনার ফোন নম্বর নিশ্চিত করতে এবং এই সুবিধার অপব্যবহার ঠেকাতে।",
@@ -201,7 +201,7 @@ export const PRIVACY_POLICY: LegalDocument = {
     {
       title: "৭. কতদিন তথ্য রাখি",
       paragraphs: [
-        "আপনার অ্যাকাউন্ট সক্রিয় থাকাকালীন এবং তারপর আইনি, কর, হিসাব, বিরোধ ও নিরাপত্তার প্রয়োজনে যতটুকু দরকার ততদিন অ্যাকাউন্ট ও লেনদেনের তথ্য রাখি। অর্ডারের মূল্য ও ভ্যাটের রেকর্ড অর্ডার রেকর্ডের অংশ হিসেবে থাকে।",
+        "আপনার অ্যাকাউন্ট সক্রিয় থাকাকালীন এবং তারপর আইনি, হিসাব, বিরোধ ও নিরাপত্তার প্রয়োজনে যতটুকু দরকার ততদিন অ্যাকাউন্ট ও লেনদেনের তথ্য রাখি। অর্ডারের মূল্য ও সার্ভিস চার্জের রেকর্ড অর্ডার রেকর্ডের অংশ হিসেবে থাকে।",
         "এককালীন SMS কোড স্বল্পস্থায়ী; মেয়াদ শেষের অল্প পরেই তা মুছে যায় বা অকার্যকর হয়। আপনি সাইন আউট করলে বা কোনো ডিভাইস নোটিফিকেশন নেওয়া বন্ধ করলে পুশ টোকেন বন্ধ করে দেওয়া হয়। আপনি ইমেইল আনসাবস্ক্রাইব করলে আপনাকে আর ইমেইল না পাঠাতে আপনার ঠিকানা একটি “ইমেইল পাঠানো যাবে না” তালিকায় রাখি।",
         "আপনি অ্যাকাউন্ট মুছে ফেলার অনুরোধ করতে পারেন (ধারা ৯ দেখুন)। আইন বা বৈধ প্রয়োজন (যেমন বিরোধ বা জালিয়াতি প্রতিরোধ) থাকলে কিছু তথ্য রাখতে হতে পারে এবং কিছু তথ্য সীমিত সময়ের জন্য ব্যাকআপে থাকতে পারে।",
       ],
@@ -277,11 +277,11 @@ export const TERMS_AND_CONDITIONS: LegalDocument = {
       ],
     },
     {
-      title: "4. Listings, pricing, and VAT",
+      title: "4. Listings, pricing, and service charge",
       paragraphs: [
-        "Sellers enter a base (ex-VAT) unit price for each product. For buyers, the Platform adds VAT on top of that base price: currently 10% where the seller’s store type is wholesale and 15% where it is retail, unless we publish a different rate. The VAT is shown to buyers as part of the order price.",
+        "Sellers enter a base unit price (before the service charge) for each product. For buyers, JBH adds a service charge on top of that base price: currently 10% where the seller’s store type is wholesale and 15% where it is retail, unless we publish a different rate. The service charge is shown to buyers as part of the order price.",
         "JBH does not currently deduct any commission or fee from a seller’s base price for sales made through the Platform. We may introduce or change fees in future; if we do, we will update these Terms and tell sellers before the change applies.",
-        "The amount charged for an order is the VAT-inclusive unit price calculated by our servers when the order is placed. Order records keep the base price, VAT rate, VAT amount, and inclusive price. Changing a product’s base price later does not change orders already placed.",
+        "The amount charged for an order is the unit price including the service charge calculated by our servers when the order is placed. Order records keep the base price, service charge rate, service charge amount, and inclusive price. Changing a product’s base price later does not change orders already placed.",
         "Each listing has a minimum order quantity (MOQ). Wholesale listings need an MOQ of at least 6; retail listings at least 1. Buyers must order at least the MOQ.",
         "Prices, stock, MOQ, images, and descriptions must be accurate and lawful. We may remove or hide listings that break the law, these Terms, or marketplace standards.",
       ],
@@ -401,11 +401,11 @@ export const TERMS_AND_CONDITIONS: LegalDocument = {
       ],
     },
     {
-      title: "৪. তালিকা, মূল্য ও ভ্যাট",
+      title: "৪. তালিকা, মূল্য ও সার্ভিস চার্জ",
       paragraphs: [
-        "সেলাররা প্রতিটি পণ্যের জন্য বেস (ভ্যাট ছাড়া) ইউনিট মূল্য লেখেন। ক্রেতার জন্য প্ল্যাটফর্ম সেই বেস মূল্যের উপরে ভ্যাট যোগ করে: বর্তমানে সেলারের দোকানের ধরন পাইকারি হলে ১০% এবং খুচরা হলে ১৫% (আমরা ভিন্ন হার প্রকাশ না করলে)। ভ্যাট ক্রেতাকে অর্ডারের মূল্যের অংশ হিসেবে দেখানো হয়।",
+        "সেলাররা প্রতিটি পণ্যের জন্য বেস (সার্ভিস চার্জ ছাড়া) ইউনিট মূল্য লেখেন। ক্রেতার জন্য JBH সেই বেস মূল্যের উপরে সার্ভিস চার্জ যোগ করে: বর্তমানে সেলারের দোকানের ধরন পাইকারি হলে ১০% এবং খুচরা হলে ১৫% (আমরা ভিন্ন হার প্রকাশ না করলে)। সার্ভিস চার্জ ক্রেতাকে অর্ডারের মূল্যের অংশ হিসেবে দেখানো হয়।",
         "প্ল্যাটফর্মের মাধ্যমে হওয়া বিক্রিতে JBH এখন সেলারের বেস মূল্য থেকে কোনো কমিশন বা ফি কাটে না। ভবিষ্যতে ফি চালু বা পরিবর্তন হলে আমরা এই শর্তাবলী হালনাগাদ করব এবং তা কার্যকর হওয়ার আগে সেলারদের জানাব।",
-        "অর্ডারের জন্য যে অঙ্ক নেওয়া হয় তা অর্ডারের সময় আমাদের সার্ভারের হিসাব করা ভ্যাটসহ ইউনিট মূল্য। অর্ডার রেকর্ডে বেস মূল্য, ভ্যাট হার, ভ্যাটের পরিমাণ ও ভ্যাটসহ মূল্য থাকে। পরে পণ্যের বেস মূল্য বদলালে আগে হয়ে যাওয়া অর্ডার বদলায় না।",
+        "অর্ডারের জন্য যে অঙ্ক নেওয়া হয় তা অর্ডারের সময় আমাদের সার্ভারের হিসাব করা সার্ভিস চার্জসহ ইউনিট মূল্য। অর্ডার রেকর্ডে বেস মূল্য, সার্ভিস চার্জ হার, সার্ভিস চার্জের পরিমাণ ও সার্ভিস চার্জসহ মূল্য থাকে। পরে পণ্যের বেস মূল্য বদলালে আগে হয়ে যাওয়া অর্ডার বদলায় না।",
         "প্রতিটি তালিকায় একটি সর্বনিম্ন অর্ডার পরিমাণ (MOQ) থাকে। পাইকারি তালিকায় MOQ কমপক্ষে ৬ এবং খুচরা তালিকায় কমপক্ষে ১। ক্রেতাকে অন্তত MOQ-এর সমান অর্ডার করতে হবে।",
         "মূল্য, স্টক, MOQ, ছবি ও বর্ণনা সঠিক ও বৈধ হতে হবে। আইন, এই শর্তাবলী বা মার্কেটপ্লেসের মান ভঙ্গ করলে আমরা তালিকা সরাতে বা লুকাতে পারি।",
       ],

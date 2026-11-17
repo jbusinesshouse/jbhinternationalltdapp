@@ -198,7 +198,7 @@ export async function fetchMyOrders() {
 }
 
 export async function fetchOrderDetail(orderId: string) {
-  return apiRequest<{ order: any; seller: any; review: any }>(
+  return apiRequest<{ order: any; seller: any; review: any; shipment?: any }>(
     `/orders/${orderId}`
   );
 }
@@ -223,7 +223,8 @@ export async function fetchSalesOrders() {
 }
 
 export async function fetchSaleDetail(orderId: string) {
-  return apiRequest<{ order: any }>(`/sales/${orderId}`);
+  // `shipment` is present for courier orders on newer APIs (null otherwise).
+  return apiRequest<{ order: any; shipment?: any }>(`/sales/${orderId}`);
 }
 
 export async function updateSaleStatus(

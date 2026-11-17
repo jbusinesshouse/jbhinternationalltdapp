@@ -32,7 +32,7 @@ import {
 } from '@/lib/moqRules';
 import { fetchSellerUploadEligibility } from '@/lib/sellerGuards';
 import { supabase } from '@/lib/supabase';
-import { buyerPriceVatHint } from '@/lib/vat';
+import { buyerPriceServiceChargeHint } from '@/lib/serviceCharge';
 import { styles } from '@/styles/productUpload';
 import Feather from '@expo/vector-icons/Feather';
 import { Picker } from '@react-native-picker/picker';
@@ -114,6 +114,8 @@ const ProductUpload = () => {
     const [subCategoryId, setSubCategoryId] = useState<string | null>(null);
     const [price, setPrice] = useState('');
     const [moq, setMoq] = useState('');
+    /** Optional kg per unit (courier pricing). Blank = server default. */
+    const [weightKg, setWeightKg] = useState('');
     const [description, setDescription] = useState('');
     const [variants, setVariants] = useState<Variant[]>([]);
 
@@ -350,6 +352,7 @@ const ProductUpload = () => {
         setSubCategoryId(null);
         setPrice('');
         setMoq('');
+        setWeightKg('');
         setDescription('');
         setVariants([]);
         setAvailableSizes([]);
@@ -516,6 +519,7 @@ const ProductUpload = () => {
                 selected_category: category.trim(),
                 price: parsedPrice,
                 moq: parsedMoq,
+                ...(parsePositiveNumber(weightKg) ? { weight_kg: parsePositiveNumber(weightKg) } : {}),
                 images: imagePayload,
                 variants: variantPayload,
             });
@@ -750,10 +754,10 @@ const ProductUpload = () => {
                     <TextInput placeholder="Product Name" placeholderTextColor="#9CA3AF" value={name} onChangeText={setName} style={styles.input} />
                     <TextInput placeholder="Price (BDT) Per Item" placeholderTextColor="#9CA3AF" keyboardType="numeric" value={price} onChangeText={setPrice} style={styles.input} />
                     {(() => {
-                        const vatHint = buyerPriceVatHint(price, storeType);
-                        return vatHint ? (
+                        const serviceChargeHint = buyerPriceServiceChargeHint(price, storeType);
+                        return serviceChargeHint ? (
                             <Text style={{ color: '#6B7280', fontSize: 12, marginTop: -6, marginBottom: 10 }}>
-                                {vatHint}
+                                {serviceChargeHint}
                             </Text>
                         ) : null;
                     })()}
@@ -763,6 +767,14 @@ const ProductUpload = () => {
                         keyboardType="numeric"
                         value={moq}
                         onChangeText={setMoq}
+                        style={styles.input}
+                    />
+                    <TextInput
+                        placeholder="প্রতি পিসের ওজন (কেজি, ঐচ্ছিক) — যেমন 0.5"
+                        placeholderTextColor="#9CA3AF"
+                        keyboardType="decimal-pad"
+                        value={weightKg}
+                        onChangeText={setWeightKg}
                         style={styles.input}
                     />
                     <RichTextEditor value={description} onChange={setDescription} />

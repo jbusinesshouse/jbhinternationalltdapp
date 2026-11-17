@@ -1,6 +1,6 @@
 import { useProfile } from "@/hooks/useProfile";
 import { goToSignIn } from "@/lib/guestAuth";
-import { router } from "expo-router";
+import { router, type Href } from "expo-router";
 import {
   ActivityIndicator,
   Pressable,
@@ -84,6 +84,11 @@ function WholesaleHub() {
           দ্রুত লিংক
         </Text>
         <HubLink title="সেলস অর্ডার" onPress={() => router.push("/sales")} />
+        <HubLink
+          title="কুরিয়ার পিকআপ ঠিকানা"
+          // Typed-routes list regenerates on `expo start`; the route file is app/pickupAddress.
+          onPress={() => router.push("/pickupAddress" as Href)}
+        />
         <HubLink title="আমার অর্ডার" onPress={() => router.push("/orders")} />
         <HubLink
           title="প্রোডাক্ট আপলোড"

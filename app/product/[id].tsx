@@ -513,7 +513,7 @@ const ProductPreview = () => {
                     />
                 </View>
 
-                {/* PRICE (VAT-inclusive from API) */}
+                {/* PRICE (incl. service charge, from API) */}
                 <View style={styles.productInfo}>
                     <View style={styles.productPriceWrapper}>
                         <Text style={styles.productPrice}>
@@ -527,7 +527,7 @@ const ProductPreview = () => {
                                 fontWeight: '400',
                             }}
                         >
-                            incl. VAT
+                            incl. service charge
                         </Text>
                         <Text style={styles.moq}>
                             Min. order {product.moq} pieces

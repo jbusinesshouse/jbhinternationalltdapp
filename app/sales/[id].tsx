@@ -2,6 +2,11 @@ import ConfirmModal from '@/components/modal/ConfirmModal'
 import { showAppAlert } from '@/context/AppAlertContext'
 import { ApiError } from '@/lib/api'
 import { fetchSaleDetail, updateSaleStatus } from '@/lib/catalogApi'
+import {
+    COURIER_CONTROLLED,
+    PublicShipment,
+    SHIPMENT_STATUS_LABEL,
+} from '@/lib/courier'
 import { styles } from '@/styles/profile'
 import { useLocalSearchParams, useNavigation } from 'expo-router'
 import React, { useEffect, useState } from 'react'
@@ -26,7 +31,15 @@ type Order = {
     delivery_address: string
     user_id: string
     order_items?: any[]
+    delivery_method?: string | null
 }
+
+const COURIER_ERROR_CODES = new Set([
+    'PICKUP_STORE_NOT_ACTIVE',
+    'COURIER_MANAGED',
+    'INVALID_PHONE',
+    'DELIVERY_DISABLED',
+])
 
 const SalesDetails = () => {
     const navigation = useNavigation()
@@ -38,6 +51,7 @@ const SalesDetails = () => {
 
     const [modalVisible, setModalVisible] = useState(false)
     const [pendingStatus, setPendingStatus] = useState<string | null>(null)
+    const [shipment, setShipment] = useState<PublicShipment | null>(null)
 
     const fetchOrder = async () => {
         if (!id) return
@@ -46,6 +60,7 @@ const SalesDetails = () => {
             setLoading(true)
             const res = await fetchSaleDetail(id)
             setOrder(res.order as Order)
+            setShipment(res.shipment ?? null)
         } catch (err) {
             if (__DEV__) {
                 console.log(err)
@@ -89,6 +104,8 @@ const SalesDetails = () => {
                     'ক্রেতাকে বাতিলের অনুরোধ পাঠানো হয়েছে।'
                 )
             }
+            // Courier order accepted → load the new shipment (parcel ID etc.).
+            if (order.delivery_method === 'pathao') void fetchOrder()
         } catch (err) {
             if (__DEV__) {
                 console.log(err)
@@ -97,6 +114,11 @@ const SalesDetails = () => {
                 setOrder(prev =>
                     prev ? { ...prev, status: oldStatus } : prev
                 )
+            }
+            // Courier-specific errors carry their own message.
+            if (err instanceof ApiError && err.code && COURIER_ERROR_CODES.has(err.code)) {
+                showAppAlert('কুরিয়ার', err.message)
+                return
             }
             const isDuplicate = err instanceof ApiError && err.status === 409
             showAppAlert(
@@ -138,6 +160,9 @@ const SalesDetails = () => {
         ) || 0
 
     const isOnHold = order.status?.toLowerCase() === 'hold'
+    const isCourierOrder = order.delivery_method === 'pathao'
+    const courierControlled =
+        isCourierOrder && !!shipment && COURIER_CONTROLLED.has(shipment.status)
 
     const getStatusColor = () => {
         switch (order.status?.toLowerCase()) {
@@ -224,12 +249,39 @@ const SalesDetails = () => {
                     ) : (
                         <View style={s.btnRow}>
                             <StatusBtn label="Processing" onPress={() => askUpdateStatus('processing')} active={order.status === 'processing'} disabled={updating} />
-                            <StatusBtn label="Shipped" onPress={() => askUpdateStatus('shipped')} active={order.status === 'shipped'} disabled={updating} />
-                            <StatusBtn label="Completed" onPress={() => askUpdateStatus('completed')} active={order.status === 'completed'} disabled={updating} />
+                            {!courierControlled ? (
+                                <>
+                                    <StatusBtn label="Shipped" onPress={() => askUpdateStatus('shipped')} active={order.status === 'shipped'} disabled={updating} />
+                                    <StatusBtn label="Completed" onPress={() => askUpdateStatus('completed')} active={order.status === 'completed'} disabled={updating} />
+                                </>
+                            ) : null}
                             <StatusBtn label="Cancelled" onPress={() => askUpdateStatus('cancelled')} active={order.status === 'cancelled'} danger disabled={updating} />
                         </View>
                     )}
                 </Card>
+
+                {isCourierOrder ? (
+                    <Card>
+                        <SectionTitle>Pathao কুরিয়ার</SectionTitle>
+                        {shipment ? (
+                            <>
+                                <Info
+                                    label="অবস্থা"
+                                    value={SHIPMENT_STATUS_LABEL[shipment.status] ?? shipment.status}
+                                />
+                                <Info label="পার্সেলের গায়ে লিখুন" value={shipment.merchant_order_id} />
+                                {shipment.consignment_id ? (
+                                    <Info label="কনসাইনমেন্ট আইডি" value={shipment.consignment_id} />
+                                ) : null}
+                                <Info label="ক্রেতার কাছ থেকে আদায়" value={`৳${shipment.amount_to_collect}`} />
+                            </>
+                        ) : (
+                            <Text style={s.subText}>
+                                &quot;Processing&quot; করলে Pathao পিকআপ বুক হবে। শিপড/সম্পন্ন স্ট্যাটাস কুরিয়ার থেকে স্বয়ংক্রিয়ভাবে আসবে।
+                            </Text>
+                        )}
+                    </Card>
+                ) : null}
 
                 <Card>
                     <SectionTitle>Customer</SectionTitle>
